@@ -77,7 +77,7 @@ def computeAlternative(currentAlternative, computeOptions):
             # work it's magic on the W2_con file and execture simulation    
 
 	# remove me most of the time
-	backdate_W2_files_to_skip_compute(run_dir)
+	#backdate_W2_files_to_skip_compute(run_dir)
     
     return True
 
