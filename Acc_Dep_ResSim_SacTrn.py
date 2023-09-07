@@ -46,11 +46,11 @@ def computeAlternative(currentAlternative, computeOptions):
                       '::'.join([output_dss_file,'/MR Sac.-Shasta Lake/Pit R. Branch-Flow/Flow//1Hour/228-230.6.125.1.1/']),
                       '::'.join([output_dss_file,'/MR Sac.-Shasta Lake/Squaw Creek-Flow/Flow//1Hour/228-230.7.125.1.1/']),]
 
-    outflow_records = ['/MR Sac.-Shasta Lake/SHA-Spill Release/Flow//1Hour/228-230.11.125.4.1/',
+    outflow_records = ['/MR Sac.-Shasta Lake/SHA-Spill Release/Flow//1Hour/229-230.11.125.4.1/',
                        '::'.join([fallback_dss_file,'/USBR/SHASTA_RRU/FLOW//1HOUR/SUPP/']),
                        '::'.join([fallback_dss_file,'/USBR/SHASTA_RRM/FLOW//1HOUR/SUPP/']),
                        '::'.join([fallback_dss_file,'/USBR/SHASTA_RRL/FLOW//1HOUR/SUPP/']),
-                       '/MR Sac.-Shasta Lake/SHA-Generation Release/Flow//1Hour/228-230.11.125.3.1/'
+                       '/MR Sac.-Shasta Lake/SHA-Generation Release/Flow//1Hour/229-230.11.125.3.1/'
                        ]
 
     stage_record = '::'.join([fallback_dss_file,'/USBR/SHASTA/ELEVATION//1HOUR/USBR_BLESSED/'])
@@ -58,13 +58,13 @@ def computeAlternative(currentAlternative, computeOptions):
 
     elev_stor_area = cbfj.read_elev_storage_area_file(os.path.join(shared_dir, 'AMR_scratch_shasta.csv'), 'Shasta') #TODO: check this    
 
-    use_conic = True
+    use_conic = False
     write_evap = False
     write_storage = False
 
     evap_dss_record_name = "/SHASTA RESERVOIR/EVAP FLOW/FLOW//1HOUR/DERIVED/"
     storage_dss_record_name = "/SHASTA RESERVOIR/STORAGE/FLOW//1HOUR/DERIVED/"
-    output_dss_record_name = "/SHASTA RESERVOIR/BALANCE FLOW MINRR/1HOUR//1DAY/DERIVED/"
+    output_dss_record_name = "/SHASTA RESERVOIR/BALANCE FLOW/FLOW//1HOUR/DERIVED/"
     if use_conic:
         output_dss_record_name = "/SHASTA RESERVOIR/BALANCE FLOW/FLOW//1HOUR/DERIVED-CONIC INTERP/"
         if 'ZEROS' in evap_record:
@@ -83,8 +83,8 @@ def computeAlternative(currentAlternative, computeOptions):
     # Evap assumed to be period accumulated length (e.g., ft)
     # Stage assumed to be instantaneous values
 
-    inflow_records = ['::'.join([DMS_hydro_dss_file,'/MR Sac.-Shasta Lake/SHA-Generation Release/Flow//1Hour/228-230.11.125.3.1/']),
-                      '::'.join([DMS_hydro_dss_file,'/MR Sac.-Shasta Lake/SHA-Spill Release/Flow//1Hour/228-230.11.125.4.1/']),
+    inflow_records = ['::'.join([DMS_hydro_dss_file,'/MR Sac.-Shasta Lake/SHA-Generation Release/Flow//1Hour/229-230.11.125.3.1/']),
+                      '::'.join([DMS_hydro_dss_file,'/MR Sac.-Shasta Lake/SHA-Spill Release/Flow//1Hour/229-230.11.125.4.1/']),
                       '/USBR/SHASTA_RRU/FLOW//1HOUR/SUPP/',
                       '/USBR/SHASTA_RRM/FLOW//1HOUR/SUPP/',
                       '/USBR/SHASTA_RRL/FLOW//1HOUR/SUPP/',

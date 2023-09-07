@@ -199,7 +199,7 @@ def create_balance_flows(currentAlt, timewindow, res_name, inflow_records, outfl
     print('Reading inflows')
     for j, inflow_record in enumerate(inflow_records): #for each of the dss paths in inflow_records
         pathname = inflow_record
-        print('\nreading' + str(pathname))
+        print('\nreading: ' + str(pathname))
         try:
        
             print(starttime_str, endtime_str)
@@ -400,6 +400,7 @@ def create_balance_flows(currentAlt, timewindow, res_name, inflow_records, outfl
     tsc.values = [flow_resid[0],flow_resid[0]] + flow_resid
     #tsc.startTime = times[1]
     tsc.units = 'CFS'
+    tsc.type = 'PER-AVER'
     #tsc.endTime = times[-1]
     # tsc.startHecTime = timewindow.getStartTime()
     # tsc.endHecTime = timewindow.getEndTime()
