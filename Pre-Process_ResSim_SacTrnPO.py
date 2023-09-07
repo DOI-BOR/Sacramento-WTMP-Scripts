@@ -20,6 +20,8 @@ from Simple_DSS_Functions import resample_dss_ts
 from com.rma.io import DssFileManagerImpl
 from java.util import TimeZone
 
+from Acc_Dep_ResSim_SacTrn import computeAlternative as acc_dep_5Res_ResSim
+
 units_need_fixing = ['radians','tenths',r'langley/min']
 
 def fix_DMS_types_units(dss_file):
@@ -98,6 +100,7 @@ def replace_data(currentAlt, timewindow, pairs, dss_file, dss_outfile, months, s
         base_hectimes = base_data.times
         base_units = base_data.units
         base_interval = base_data.interval
+        base_type = base_data.type
         base_values, base_hectimes = check_start_and_end(base_values, base_hectimes, starttime_hectime, endtime_hectime)
 
         alt = dssFm.read(pair[1], starttime_str, endtime_str, False)
@@ -136,6 +139,7 @@ def replace_data(currentAlt, timewindow, pairs, dss_file, dss_outfile, months, s
         tsc.fullName = new_pathname
         tsc.values = base_values
         tsc.units = base_units
+        tsc.type = base_type
         tsc.numberValues = len(base_values)
 
         dssFmOut = HecDss.open(dss_outfile)
@@ -207,6 +211,7 @@ def add_flows(currentAlt, timewindow, inflow_records, dss_file, output_dss_recor
             values = ts_data.values
             hectimes = ts_data.times
             units = ts_data.units
+            tstype = ts_data.type
             # print('num values {0}'.format(len(values)))
             # print('start {0}'.format(ts_data.getStartTime()))
             # print('end {0}'.format(ts_data.getEndTime()))
@@ -247,6 +252,7 @@ def add_flows(currentAlt, timewindow, inflow_records, dss_file, output_dss_recor
     tsc.values = inflows
     #tsc.startTime = times[1]
     tsc.units = 'CFS'
+    tsc.type = tstype
     #tsc.endTime = times[-1]
     tsc.numberValues = len(inflows)
     #tsc.startHecTime = timewindow.getStartTime()
@@ -258,9 +264,7 @@ def add_flows(currentAlt, timewindow, inflow_records, dss_file, output_dss_recor
     dssFm_out.close()
 
 
-def computeAlternative(currentAlternative, computeOptions):
-    currentAlternative.addComputeMessage("Computing ScriptingAlternative:" + currentAlternative.getName())
-    currentAlternative.addComputeMessage('\n')
+def DMS_data_preprocess_ResSim_5Res(currentAlternative, computeOptions):
     dss_file = computeOptions.getDssFilename()
     rtw = computeOptions.getRunTimeWindow()
     
@@ -281,7 +285,7 @@ def computeAlternative(currentAlternative, computeOptions):
     # calculate meteorological airtemp lapse for the elevation @ Shasta Lake
     currentAlternative.addComputeMessage('lapse infile: '+met_dss_file)
     currentAlternative.addComputeMessage('lapse outfile: '+output_dss_file)
-    airtemp_lapse(met_dss_file, "/MR SAC.-CLEAR CR. TO SAC R./KRDD-AIR TEMPERATURE/TEMP-AIR//1HOUR/238-235.40.53.1.1/",
+    airtemp_lapse(met_dss_file, "/MR SAC.-CLEAR CR. TO SAC R./KRDD-AIR TEMPERATURE/TEMP-AIR//1HOUR/245-235.40.53.1.1/",
                   0.7, output_dss_file, "Shasta_Lapse")
 
     # add PG flows 1-5 to create PG_SUM record used by ResSim/TCD scripts
@@ -311,17 +315,17 @@ def computeAlternative(currentAlternative, computeOptions):
     # Lewiston is still dependent on using Met data from Redding during Jan-Feb-Mar.  Create those spliced Met data records...
     pairs = [
             ["/MR Sac.-Lewiston Res./TCAC1 - Calc Data-Air temperature/Temp-Air//1Hour/242-232.6.53.1.1/",
-             "/MR Sac.-Clear Cr. to Sac R./KRDD-Air temperature/Temp-Air//1Hour/238-235.40.53.1.1/"],
+             "/MR Sac.-Clear Cr. to Sac R./KRDD-Air temperature/Temp-Air//1Hour/245-235.40.53.1.1/"],
             ["/MR Sac.-Lewiston Res./TCAC1 - Calc Data-Dew Point/Temp-DewPoint//1Hour/242-232.6.51.1.1/",
-             "/MR Sac.-Clear Cr. to Sac R./KRDD-Dew Point/Temp-DewPoint//1Hour/238-235.40.51.1.1/"],
+             "/MR Sac.-Clear Cr. to Sac R./KRDD-Dew Point/Temp-DewPoint//1Hour/245-235.40.51.1.1/"],
             ["/MR SAC.-LEWISTON RES./TCAC1-SOLAR RADIATION/IRRAD-SOLAR//1HOUR/242-232.5.135.1.1/",
-             "/MR SAC.-CLEAR CR. TO SAC R./RRAC1-SOLAR RADIATION/IRRAD-SOLAR//1HOUR/238-235.41.135.1.1/"],
+             "/MR SAC.-CLEAR CR. TO SAC R./RRAC1-SOLAR RADIATION/IRRAD-SOLAR//1HOUR/245-235.41.135.1.1/"],
             ["/MR Sac.-Lewiston Res./TCAC1-Wind Direction/Dir-Wind/0/1Hour/242-232.5.133.1.2/",
-             "/MR Sac.-Clear Cr. to Sac R./KRDD-Wind Direction/Dir-Wind//1Hour/238-235.40.133.1.2/"],
+             "/MR Sac.-Clear Cr. to Sac R./KRDD-Wind Direction/Dir-Wind//1Hour/245-235.40.133.1.2/"],
             ["/MR Sac.-Lewiston Res./TCAC1-Wind Speed/Speed-Wind//1Hour/242-232.5.133.1.1/",
-             "/MR Sac.-Clear Cr. to Sac R./KRDD-Wind Speed/Speed-Wind//1Hour/238-235.40.133.1.1/"],
+             "/MR Sac.-Clear Cr. to Sac R./KRDD-Wind Speed/Speed-Wind//1Hour/245-235.40.133.1.1/"],
             ["/MR Sac.-Trinity River/TCAC1 - Calc Data-Cloud Cover/%-Cloud Cover//1Day/242-236.9.129.1.1/",
-             "/MR Sac.-Clear Cr. to Sac R./RRAC1-Cloud Cover/%-Cloud Cover//1Hour/238-235.41.129.1.1/"]
+             "/MR Sac.-Clear Cr. to Sac R./RRAC1-Cloud Cover/%-Cloud Cover//1Hour/245-235.41.129.1.1/"]
              ]
 
     months = [1,2,3] #these are the months we are replacing with pair #2
@@ -351,3 +355,17 @@ def computeAlternative(currentAlternative, computeOptions):
                       '/MR Sac.-Lewiston Res./LEW-Spill Release Hrly/Flow//1Hour/226-232.12.125.5.1/']
     add_flows(currentAlternative, rtw, inflow_records, hydro_dss,
               '/MR Sac.-Lewiston Res./LEW-Total Dam Outflow/Flow//1Hour/ResSim_PreProcess/', output_dss_file)
+
+    return True
+
+
+def computeAlternative(currentAlternative, computeOptions):
+    currentAlternative.addComputeMessage("Computing ScriptingAlternative:" + currentAlternative.getName())
+    currentAlternative.addComputeMessage('\n')
+
+    data_preprocess = DMS_data_preprocess_ResSim_5Res(currentAlternative, computeOptions)
+
+    acc_dep = acc_dep_5Res_ResSim(currentAlternative, computeOptions)
+
+    if data_preprocess and acc_dep:
+        return True

@@ -1,0 +1,101 @@
+import sys
+import BoundaryFixes
+reload(BoundaryFixes)
+from hec.heclib.dss import HecDss
+from hec.heclib.util.Heclib import UNDEFINED_DOUBLE
+from hec.io import DSSIdentifier
+from hec.io import TimeSeriesContainer
+from rma.util.RMAConst import MISSING_DOUBLE
+import math
+import datetime as dt
+import DSS_Tools
+reload(DSS_Tools)
+
+##
+#
+# computeAlternative function is called when the ScriptingAlternative is computed.
+# Arguments:
+#   currentAlternative - the ScriptingAlternative. hec2.wat.plugin.java.impl.scripting.model.ScriptPluginAlt
+#   computeOptions     - the compute options.  hec.wat.model.ComputeOptions
+#
+# return True if the script was successful, False if not.
+# no explicit return will be treated as a successful return
+#
+##
+
+def computeAlternative(currentAlternative, computeOptions):
+    currentAlternative.addComputeMessage("Computing ScriptingAlternative:" + currentAlternative.getName() )
+    
+    locations = currentAlternative.getInputDataLocations()
+    if len(locations) > 1:
+        currentAlternative.addComputeMessage("Found more than 1 datapath locations. Using the first, {0}".format(outputlocations[0]))
+    elif len(locations) == 0:
+        currentAlternative.addComputeMessage("Found no datapath locations. Exiting.")
+        sys.exit(1)
+    
+    ClearCreek = locations[0]
+   
+    tspath =str(currentAlternative.loadTimeSeries(ClearCreek))
+    tspath = DSS_Tools.fixInputLocationFpart(currentAlternative, tspath)
+            
+    currentAlternative.addComputeMessage('Found DSS path: {0}'.format(tspath))
+    
+    currentAlternative.addComputeMessage('\n')
+    dssFile = computeOptions.getDssFilename()
+    rtw = computeOptions.getRunTimeWindow()
+
+    outputlocations = currentAlternative.getOutputDataLocations()
+    outputpath = currentAlternative.createOutputTimeSeries(outputlocations[0])
+    
+    if len(outputlocations) > 1:
+        currentAlternative.addComputeMessage("Found more than 1 output datapath locations. Using the first, {0}".format(outputlocations[0]))
+    outputpath = DSS_Tools.fixInputLocationFpart(currentAlternative, str(outputpath))
+
+    currentAlternative.addComputeMessage("Outputting to {0}".format(outputpath))
+
+    #heat in C
+    monthly_heating = {1: 0.81, 2: 0.71, 3: 0.74, 4: 0.73, 5: 0.93, 6: 0.71, 7: 0.75, 8: 0.74, 9: 0.76, 10: 0.68, 11: 0.77, 12: 0.82}
+
+    currentAlternative.addComputeMessage("\n##### PERFORMING HEATING #####")
+    starttime_str = rtw.getStartTimeString()
+    endtime_str = rtw.getEndTimeString()
+    currentAlternative.addComputeMessage('Looking from {0} to {1}'.format(starttime_str, endtime_str))
+    dssFm = HecDss.open(dssFile)
+    TS = dssFm.read(tspath, starttime_str, endtime_str, False)
+    TS = TS.getData()
+    hecstarttimes = TS.times
+    readabledates = []
+    for i in range(len(TS.times)):
+        hecdate = TS.getHecTime(i).dateAndTime(4) #delete later
+        if hecdate.split(':')[0][-2:] == '24':
+            hecdate = hecdate.split(',')[0] + ', 23:00'
+            dthecdate = dt.datetime.strptime(hecdate, '%d%b%Y, %H:%M') #31Dec2018, 24:00
+            dthecdate += dt.timedelta(hours=1)
+        else:
+            dthecdate = dt.datetime.strptime(hecdate, '%d%b%Y, %H:%M') #31Dec2018, 24:00
+        readabledates.append(dthecdate)
+        
+    new_values = []
+    for vi, val in enumerate(TS.values):
+        valmonth = readabledates[vi].month
+        heat_amount_c = monthly_heating[valmonth]
+        new_values.append(val + heat_amount_c)
+        
+    tsc = TimeSeriesContainer()
+    tsc.times = hecstarttimes
+    tsc.fullName = outputpath
+    tsc.values = new_values
+    tsc.startTime = hecstarttimes[0]
+    tsc.units = 'c'
+    tsc.endTime = hecstarttimes[-1]
+    tsc.numberValues = len(new_values)
+    tsc.startHecTime = rtw.getStartTime()
+    tsc.endHecTime = rtw.getEndTime()
+    dssFm.write(tsc)
+    dssFm.close()
+    currentAlternative.addComputeMessage("Number of Written values: {0}".format(len(new_values)))
+    return True
+
+
+            
+
