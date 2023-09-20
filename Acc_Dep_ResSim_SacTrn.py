@@ -36,21 +36,21 @@ def computeAlternative(currentAlternative, computeOptions):
     output_dss_file = os.path.join(shared_dir,'DMS_SacTrn_ResSim_Pre-Process.dss')
     fallback_dss_file = os.path.join(shared_dir,'WTMP_SacTrn_Historical.dss')
 
-    sdf.resample_dss_ts(DMS_hydro_dss_file,'/MR Sac.-Shasta Lake/Sacramento R. a Delta-Flow/Flow//1Day/228-230.9.125.1.1/',rtw,output_dss_file,'1HOUR')
-    sdf.resample_dss_ts(DMS_hydro_dss_file,'/MR Sac.-Shasta Lake/McCloud River-Flow/Flow//1Day/228-230.8.125.1.1/',rtw,output_dss_file,'1HOUR')
-    sdf.resample_dss_ts(DMS_hydro_dss_file,'/MR Sac.-Shasta Lake/Pit R. Branch-Flow/Flow//1Day/228-230.6.125.1.1/',rtw,output_dss_file,'1HOUR')
-    sdf.resample_dss_ts(DMS_hydro_dss_file,'/MR Sac.-Shasta Lake/Squaw Creek-Flow/Flow//1Day/228-230.7.125.1.1/',rtw,output_dss_file,'1HOUR')
+    sdf.resample_dss_ts(DMS_hydro_dss_file,'/MR Sac.-Shasta Lake/Sacramento R. a Delta-Flow/Flow//1Day/230.9.125.1.1/',rtw,output_dss_file,'1HOUR')
+    sdf.resample_dss_ts(DMS_hydro_dss_file,'/MR Sac.-Shasta Lake/McCloud River-Flow/Flow//1Day/230.8.125.1.1/',rtw,output_dss_file,'1HOUR')
+    sdf.resample_dss_ts(DMS_hydro_dss_file,'/MR Sac.-Shasta Lake/Pit R. Branch-Flow/Flow//1Day/230.6.125.1.1/',rtw,output_dss_file,'1HOUR')
+    sdf.resample_dss_ts(DMS_hydro_dss_file,'/MR SAC.-SHASTA LAKE/SULANHARAS CREEK-FLOW/Flow//1Day/230.7.125.1.1/',rtw,output_dss_file,'1HOUR')
 
-    inflow_records = ['::'.join([output_dss_file,'/MR Sac.-Shasta Lake/McCloud River-Flow/Flow//1Hour/228-230.8.125.1.1/']),
-                      '::'.join([output_dss_file,'/MR Sac.-Shasta Lake/McCloud River-Flow/Flow//1Hour/228-230.8.125.1.1/']),
-                      '::'.join([output_dss_file,'/MR Sac.-Shasta Lake/Pit R. Branch-Flow/Flow//1Hour/228-230.6.125.1.1/']),
-                      '::'.join([output_dss_file,'/MR Sac.-Shasta Lake/Squaw Creek-Flow/Flow//1Hour/228-230.7.125.1.1/']),]
+    inflow_records = ['::'.join([output_dss_file,'/MR Sac.-Shasta Lake/McCloud River-Flow/Flow//1Hour/230.8.125.1.1/']),
+                      '::'.join([output_dss_file,'/MR Sac.-Shasta Lake/McCloud River-Flow/Flow//1Hour/230.8.125.1.1/']),
+                      '::'.join([output_dss_file,'/MR Sac.-Shasta Lake/Pit R. Branch-Flow/Flow//1Hour/230.6.125.1.1/']),
+                      '::'.join([output_dss_file,'/MR SAC.-SHASTA LAKE/SULANHARAS CREEK-FLOW/Flow//1Hour/230.7.125.1.1/']),]
 
-    outflow_records = ['/MR Sac.-Shasta Lake/SHA-Spill Release/Flow//1Hour/229-230.11.125.4.1/',
+    outflow_records = ['/MR Sac.-Shasta Lake/SHA-Spill Release/Flow//1Hour/230.11.125.4.1/',
                        '::'.join([fallback_dss_file,'/USBR/SHASTA_RRU/FLOW//1HOUR/SUPP/']),
                        '::'.join([fallback_dss_file,'/USBR/SHASTA_RRM/FLOW//1HOUR/SUPP/']),
                        '::'.join([fallback_dss_file,'/USBR/SHASTA_RRL/FLOW//1HOUR/SUPP/']),
-                       '/MR Sac.-Shasta Lake/SHA-Generation Release/Flow//1Hour/229-230.11.125.3.1/'
+                       '/MR Sac.-Shasta Lake/SHA-Generation Release/Flow//1Hour/230.11.125.3.1/'
                        ]
 
     stage_record = '::'.join([fallback_dss_file,'/USBR/SHASTA/ELEVATION//1HOUR/USBR_BLESSED/'])
@@ -83,8 +83,8 @@ def computeAlternative(currentAlternative, computeOptions):
     # Evap assumed to be period accumulated length (e.g., ft)
     # Stage assumed to be instantaneous values
 
-    inflow_records = ['::'.join([DMS_hydro_dss_file,'/MR Sac.-Shasta Lake/SHA-Generation Release/Flow//1Hour/229-230.11.125.3.1/']),
-                      '::'.join([DMS_hydro_dss_file,'/MR Sac.-Shasta Lake/SHA-Spill Release/Flow//1Hour/229-230.11.125.4.1/']),
+    inflow_records = ['::'.join([DMS_hydro_dss_file,'/MR Sac.-Shasta Lake/SHA-Generation Release/Flow//1Hour/230.11.125.3.1/']),
+                      '::'.join([DMS_hydro_dss_file,'/MR Sac.-Shasta Lake/SHA-Spill Release/Flow//1Hour/230.11.125.4.1/']),
                       '/USBR/SHASTA_RRU/FLOW//1HOUR/SUPP/',
                       '/USBR/SHASTA_RRM/FLOW//1HOUR/SUPP/',
                       '/USBR/SHASTA_RRL/FLOW//1HOUR/SUPP/',
@@ -123,17 +123,17 @@ def computeAlternative(currentAlternative, computeOptions):
     # Evap assumed to be period accumulated length (e.g., ft)
     # Stage assumed to be instantaneous values
 
-    inflow_records = ['/MR Sac.-Trinity Lake/TRN-Generation Release/Flow//1Hour/225-231.5.125.2.1/',
-                      '/MR Sac.-Trinity Lake/TRN-Outlet Release G1/Flow//1Hour/225-231.5.125.7.1/',
-                      '/MR Sac.-Trinity Lake/TRN-Outlet Release G2/Flow//1Hour/225-231.5.125.8.1/',
-                      '/MR Sac.-Trinity Lake/TRN-Outlet Release G3/Flow//1Hour/225-231.5.125.9.1/',
-                      '/MR Sac.-Trinity Lake/TRN-Spill Release/Flow//1Hour/225-231.5.125.3.1/']
+    inflow_records = ['/MR Sac.-Trinity Lake/TRN-Generation Release/Flow//1Hour/231.5.125.2.1/',
+                      '/MR Sac.-Trinity Lake/TRN-Outlet Release G1/Flow//1Hour/231.5.125.7.1/',
+                      '/MR Sac.-Trinity Lake/TRN-Outlet Release G2/Flow//1Hour/231.5.125.8.1/',
+                      '/MR Sac.-Trinity Lake/TRN-Outlet Release G3/Flow//1Hour/231.5.125.9.1/',
+                      '/MR Sac.-Trinity Lake/TRN-Spill Release/Flow//1Hour/231.5.125.3.1/']
 
-    outflow_records = ['/MR Sac.-Whiskeytown Lake/JCR-Generation Release/Flow//1Hour/226-233.13.125.1.1/', #lewiston  CC diversion tunnel: Clear Creek Transfer operation
-                       '/MR Sac.-Lewiston Res./LEW-Fish Hatchery Release/Flow//1Hour/226-232.12.125.1.1/',
-                       '/MR Sac.-Lewiston Res./LEW-Generation Release Hrly/Flow//1Hour/226-232.12.125.3.1/',
-                       '/MR Sac.-Lewiston Res./LEW-Outlet Release Hrly/Flow//1Hour/226-232.12.125.2.1/',
-                       '/MR Sac.-Lewiston Res./LEW-Spill Release Hrly/Flow//1Hour/226-232.12.125.5.1/', #Lewiston Res. Dam at Trinity River - Powerhouse
+    outflow_records = ['/MR Sac.-Whiskeytown Lake/JCR-Generation Release/Flow//1Hour/233.13.125.1.1/', #lewiston  CC diversion tunnel: Clear Creek Transfer operation
+                       '/MR Sac.-Lewiston Res./LEW-Fish Hatchery Release/Flow//1Hour/232.12.125.1.1/',
+                       '/MR Sac.-Lewiston Res./LEW-Generation Release Hrly/Flow//1Hour/232.12.125.3.1/',
+                       '/MR Sac.-Lewiston Res./LEW-Outlet Release Hrly/Flow//1Hour/232.12.125.2.1/',
+                       '/MR Sac.-Lewiston Res./LEW-Spill Release Hrly/Flow//1Hour/232.12.125.5.1/', #Lewiston Res. Dam at Trinity River - Powerhouse
                        ]
 
     stage_record = '::'.join([fallback_dss_file,'/USBR_CLEANED_FULLLINEARINTERP/LEW_ELEVATION_PROCESSED/ELEV//1HOUR/GRAB2/'])
@@ -166,21 +166,21 @@ def computeAlternative(currentAlternative, computeOptions):
     # Stage assumed to be instantaneous values
 
     # resample the Trinity inflow data to hourly
-    sdf.resample_dss_ts(DMS_hydro_dss_file,'/MR Sac.-Trinity Lake/EF Trinity River-Inflow/Flow//1Day/225-231.7.125.1.1/',rtw,output_dss_file,'1HOUR')
-    sdf.resample_dss_ts(DMS_hydro_dss_file,'/MR Sac.-Trinity Lake/Stuart Fork-Inflow/Flow//1Day/225-231.8.125.1.1/',rtw,output_dss_file,'1HOUR')
-    sdf.resample_dss_ts(DMS_hydro_dss_file,'/MR Sac.-Trinity Lake/Swift Creek-Inflow/Flow//1Day/225-231.9.125.1.1/',rtw,output_dss_file,'1HOUR')
-    sdf.resample_dss_ts(DMS_hydro_dss_file,'/MR Sac.-Trinity Lake/Trinity River-Inflow/Flow//1Day/225-231.6.125.1.1/',rtw,output_dss_file,'1HOUR')
+    sdf.resample_dss_ts(DMS_hydro_dss_file,'/MR Sac.-Trinity Lake/EF Trinity River-Inflow/Flow//1Day/231.7.125.1.1/',rtw,output_dss_file,'1HOUR')
+    sdf.resample_dss_ts(DMS_hydro_dss_file,'/MR Sac.-Trinity Lake/Stuart Fork-Inflow/Flow//1Day/231.8.125.1.1/',rtw,output_dss_file,'1HOUR')
+    sdf.resample_dss_ts(DMS_hydro_dss_file,'/MR Sac.-Trinity Lake/Swift Creek-Inflow/Flow//1Day/231.9.125.1.1/',rtw,output_dss_file,'1HOUR')
+    sdf.resample_dss_ts(DMS_hydro_dss_file,'/MR Sac.-Trinity Lake/Trinity River-Inflow/Flow//1Day/231.6.125.1.1/',rtw,output_dss_file,'1HOUR')
 
-    inflow_records = ['::'.join([output_dss_file,'/MR Sac.-Trinity Lake/EF Trinity River-Inflow/Flow//1Hour/225-231.7.125.1.1/']),
-                      '::'.join([output_dss_file,'/MR Sac.-Trinity Lake/Stuart Fork-Inflow/Flow//1Hour/225-231.8.125.1.1/']),
-                      '::'.join([output_dss_file,'/MR Sac.-Trinity Lake/Swift Creek-Inflow/Flow//1Hour/225-231.9.125.1.1/']),
-                      '::'.join([output_dss_file,'/MR Sac.-Trinity Lake/Trinity River-Inflow/Flow//1Hour/225-231.6.125.1.1/']),]
+    inflow_records = ['::'.join([output_dss_file,'/MR Sac.-Trinity Lake/EF Trinity River-Inflow/Flow//1Hour/231.7.125.1.1/']),
+                      '::'.join([output_dss_file,'/MR Sac.-Trinity Lake/Stuart Fork-Inflow/Flow//1Hour/231.8.125.1.1/']),
+                      '::'.join([output_dss_file,'/MR Sac.-Trinity Lake/Swift Creek-Inflow/Flow//1Hour/231.9.125.1.1/']),
+                      '::'.join([output_dss_file,'/MR Sac.-Trinity Lake/Trinity River-Inflow/Flow//1Hour/231.6.125.1.1/']),]
 
-    outflow_records = ['/MR Sac.-Trinity Lake/TRN-Generation Release/Flow//1Hour/225-231.5.125.2.1/',
-                      '/MR Sac.-Trinity Lake/TRN-Outlet Release G1/Flow//1Hour/225-231.5.125.7.1/',
-                      '/MR Sac.-Trinity Lake/TRN-Outlet Release G2/Flow//1Hour/225-231.5.125.8.1/',
-                      '/MR Sac.-Trinity Lake/TRN-Outlet Release G3/Flow//1Hour/225-231.5.125.9.1/',
-                      '/MR Sac.-Trinity Lake/TRN-Spill Release/Flow//1Hour/225-231.5.125.3.1/']
+    outflow_records = ['/MR Sac.-Trinity Lake/TRN-Generation Release/Flow//1Hour/231.5.125.2.1/',
+                      '/MR Sac.-Trinity Lake/TRN-Outlet Release G1/Flow//1Hour/231.5.125.7.1/',
+                      '/MR Sac.-Trinity Lake/TRN-Outlet Release G2/Flow//1Hour/231.5.125.8.1/',
+                      '/MR Sac.-Trinity Lake/TRN-Outlet Release G3/Flow//1Hour/231.5.125.9.1/',
+                      '/MR Sac.-Trinity Lake/TRN-Spill Release/Flow//1Hour/231.5.125.3.1/']
 
     stage_record = '::'.join([fallback_dss_file,'/USBR_RECLEANED_FULLLINEARINTERP/TRN_ELEVATION/ELEV//1HOUR/GRAB2/'])
     evap_record = '::'.join([fallback_dss_file,'//ZEROS/FLOW/*/1HOUR//'])

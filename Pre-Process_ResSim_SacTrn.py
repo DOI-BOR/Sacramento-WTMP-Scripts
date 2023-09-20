@@ -14,8 +14,9 @@ import os, sys
 
 from com.rma.io import DssFileManagerImpl
 from com.rma.model import Project
-#import hec.hecmath.TimeSeriesMath as tsmath
-from Simple_DSS_Functions import resample_dss_ts
+
+import DSS_Tools
+reload(DSS_Tools)
 
 from com.rma.io import DssFileManagerImpl
 from java.util import TimeZone
@@ -162,107 +163,6 @@ def check_start_and_end(values, times, startime, endtime):
         times = times[:(len(times) - st_offset)]
     return values, times
 
-def airtemp_lapse(dss_file,dss_rec,lapse_in_C,dss_outfile,f_part):
-    dss = HecDss.open(dss_file)
-    tsm = dss.read(dss_rec)
-    lapse = lapse_in_C
-    if 'f' in tsm.getUnits().lower():
-        lapse = lapse*9.0/5.0+32.0
-    tsm = tsm.add(lapse)
-    tsc = tsm.getData()
-    dss.close()
-
-    pathparts = dss_rec.split('/')
-    pathparts[-2] = f_part
-    tsc.fullName = '/'.join(pathparts)
-    dss_out = HecDss.open(dss_outfile)
-    dss_out.write(tsc)
-    dss_out.close()
-
-
-def add_flows(currentAlt, timewindow, inflow_records, dss_file, output_dss_record_name, output_dss_file):
-     
-    #cfs_2_acreft = balance_period * 3600. / 43559.9
-    #acreft_2_cfs = 1. / cfs_2_acreft
-
-    starttime_str = timewindow.getStartTimeString()
-    endtime_str = timewindow.getEndTimeString()
-    #01Jan2014 0000
-    starttime_hectime = HecTime(starttime_str).value()
-    endtime_hectime = HecTime(endtime_str).value()
-    currentAlt.addComputeMessage('Looking from {0} to {1}'.format(starttime_str, endtime_str))
-    dssFm = HecDss.open(dss_file)
-
-    inflows = []
-    times = []
-
-    # Read inflows
-    print('Reading inflows')
-    for j, inflow_record in enumerate(inflow_records): #for each of the dss paths in inflow_records
-        pathname = inflow_record
-        currentAlt.addComputeMessage('reading' + str(pathname))
-        print('\nreading' + str(pathname))
-        try:
-       
-            print(starttime_str, endtime_str)
-            print(dss_file)
-            ts = dssFm.read(pathname, starttime_str, endtime_str, False)
-            ts_data = ts.getData()
-            values = ts_data.values
-            hectimes = ts_data.times
-            units = ts_data.units
-            tstype = ts_data.type
-            # print('num values {0}'.format(len(values)))
-            # print('start {0}'.format(ts_data.getStartTime()))
-            # print('end {0}'.format(ts_data.getEndTime()))
-            if hectimes[0] < starttime_hectime: #if startdate is before the timewindow..
-                print('start date ({0}) from DSS before timewindow ({1})..'.format(hectimes[0], starttime_hectime))
-                st_offset = (starttime_hectime - hectimes[0]) / (hectimes[1] - hectimes[0])
-                values = values[st_offset:]
-                hectimes = hectimes[st_offset:]
-            if hectimes[-1] > endtime_hectime:
-                print('end date ({0}) from DSS after timewindow ({1})..'.format(hectimes[-1], endtime_hectime))
-                st_offset = (hectimes[-1] - endtime_hectime) / (hectimes[1] - hectimes[0])
-                values = values[:(len(hectimes) - st_offset)]
-                hectimes = hectimes[:(len(hectimes) - st_offset)]
-                
-
-        except HecMathException:
-            currentAlt.addComputeMessage('ERROR reading' + str(pathname))
-            sys.exit(-1)
-
-        if units.lower() == 'cms':
-            currentAlt.addComputeMessage('Converting cms to cfs')
-            convvals = []
-            for flow in values:
-                convvals.append(flow * 35.314666213)
-            values = convvals
-
-        if len(inflows) == 0:
-            inflows = values
-            times = hectimes #TODO: check how this handles missing values
-        else:
-            for vi, v in enumerate(values):
-                inflows[vi] += v
-
-    # Output record
-    tsc = TimeSeriesContainer()
-    tsc.times = times
-    tsc.fullName = output_dss_record_name
-    tsc.values = inflows
-    #tsc.startTime = times[1]
-    tsc.units = 'CFS'
-    tsc.type = tstype
-    #tsc.endTime = times[-1]
-    tsc.numberValues = len(inflows)
-    #tsc.startHecTime = timewindow.getStartTime()
-    #tsc.endHecTime = timewindow.getEndTime()
-    dssFm_out = HecDss.open(output_dss_file)
-    dssFm_out.write(tsc)
-
-    dssFm.close()
-    dssFm_out.close()
-
 
 def forecast_data_preprocess_ResSim_5Res(currentAlternative, computeOptions):
     dss_file = computeOptions.getDssFilename()
@@ -276,45 +176,74 @@ def forecast_data_preprocess_ResSim_5Res(currentAlternative, computeOptions):
     shared_dir = os.path.join(project_dir, 'shared')
 
     output_dss_file = os.path.join(shared_dir,'forecast_SacTrn_ResSim_Pre-Process.dss')
+    forecast_dss = os.path.join(shared_dir,'WTMP_SacTrn_Forecast.dss')
 
+    hydro_dss = os.path.join(shared_dir, 'DMS_SacTrnHydroTS.dss')
+    fix_DMS_types_units(hydro_dss)
+    met_dss_file = os.path.join(shared_dir,'DMS_SacTrnMet.dss')
+    fix_DMS_types_units(met_dss_file)
+
+    
     # calculate meteorological airtemp lapse for the elevation @ Shasta Lake
     currentAlternative.addComputeMessage('lapse infile: '+met_dss_file)
     currentAlternative.addComputeMessage('lapse outfile: '+output_dss_file)
-	# TODO: update filename/path to what comes from forecast data generator
-    airtemp_lapse(met_dss_file, "/MR SAC.-CLEAR CR. TO SAC R./KRDD-AIR TEMPERATURE/TEMP-AIR//1HOUR/245-235.40.53.1.1/",
+    DSS_Tools.airtemp_lapse(forecast_dss, "/MR SAC.-CLEAR CR. TO SAC R./KRDD-AIR TEMPERATURE/TEMP-AIR//1HOUR/SACTRN_BC_SCRIPT/",
                   0.7, output_dss_file, "Shasta_Lapse")
     
     # Lewiston is still dependent on using Met data from Redding during Jan-Feb-Mar.  Create those spliced Met data records...
-    # TODO: update filename/path to what comes from forecast data generator
     pairs = [
-            ["/MR Sac.-Lewiston Res./TCAC1 - Calc Data-Air temperature/Temp-Air//1Hour/242-232.6.53.1.1/",
-             "/MR Sac.-Clear Cr. to Sac R./KRDD-Air temperature/Temp-Air//1Hour/245-235.40.53.1.1/"],
-            ["/MR Sac.-Lewiston Res./TCAC1 - Calc Data-Dew Point/Temp-DewPoint//1Hour/242-232.6.51.1.1/",
-             "/MR Sac.-Clear Cr. to Sac R./KRDD-Dew Point/Temp-DewPoint//1Hour/245-235.40.51.1.1/"],
-            ["/MR SAC.-LEWISTON RES./TCAC1-SOLAR RADIATION/IRRAD-SOLAR//1HOUR/242-232.5.135.1.1/",
-             "/MR SAC.-CLEAR CR. TO SAC R./RRAC1-SOLAR RADIATION/IRRAD-SOLAR//1HOUR/245-235.41.135.1.1/"],
-            ["/MR Sac.-Lewiston Res./TCAC1-Wind Direction/Dir-Wind/0/1Hour/242-232.5.133.1.2/",
-             "/MR Sac.-Clear Cr. to Sac R./KRDD-Wind Direction/Dir-Wind//1Hour/245-235.40.133.1.2/"],
-            ["/MR Sac.-Lewiston Res./TCAC1-Wind Speed/Speed-Wind//1Hour/242-232.5.133.1.1/",
-             "/MR Sac.-Clear Cr. to Sac R./KRDD-Wind Speed/Speed-Wind//1Hour/245-235.40.133.1.1/"],
-            ["/MR Sac.-Trinity River/TCAC1 - Calc Data-Cloud Cover/%-Cloud Cover//1Day/242-236.9.129.1.1/",
-             "/MR Sac.-Clear Cr. to Sac R./RRAC1-Cloud Cover/%-Cloud Cover//1Hour/245-235.41.129.1.1/"]
+            ["/MR Sac.-Lewiston Res./TCAC1 - Calc Data-Air temperature/Temp-Air//1Hour/SACTRN_BC_SCRIPT/",
+             "/MR Sac.-Clear Cr. to Sac R./KRDD-Air temperature/Temp-Air//1Hour/SACTRN_BC_SCRIPT/"],
+            ["/MR Sac.-Lewiston Res./TCAC1 - Calc Data-Dew Point/Temp-DewPoint//1Hour/SACTRN_BC_SCRIPT/",
+             "/MR Sac.-Clear Cr. to Sac R./KRDD-Dew Point/Temp-DewPoint//1Hour/SACTRN_BC_SCRIPT/"],
+            ["/MR SAC.-LEWISTON RES./TCAC1-SOLAR RADIATION/IRRAD-SOLAR//1HOUR/SACTRN_BC_SCRIPT/",
+             "/MR SAC.-CLEAR CR. TO SAC R./RRAC1-SOLAR RADIATION/IRRAD-SOLAR//1HOUR/SACTRN_BC_SCRIPT/"],
+            ["/MR Sac.-Lewiston Res./TCAC1-Wind Direction/Dir-Wind/0/1Hour/SACTRN_BC_SCRIPT/",
+             "/MR Sac.-Clear Cr. to Sac R./KRDD-Wind Direction/Dir-Wind//1Hour/SACTRN_BC_SCRIPT/"],
+            ["/MR Sac.-Lewiston Res./TCAC1-Wind Speed/Speed-Wind//1Hour/SACTRN_BC_SCRIPT/",
+             "/MR Sac.-Clear Cr. to Sac R./KRDD-Wind Speed/Speed-Wind//1Hour/SACTRN_BC_SCRIPT/"],
+            ["/MR Sac.-Trinity River/TCAC1 - Calc Data-Cloud Cover/%-Cloud Cover//1Day/SACTRN_BC_SCRIPT/",
+             "/MR Sac.-Clear Cr. to Sac R./RRAC1-Cloud Cover/%-Cloud Cover//1Hour/SACTRN_BC_SCRIPT/"]
              ]
-
     months = [1,2,3] #these are the months we are replacing with pair #2
-    replace_data(currentAlternative, rtw, pairs, met_dss_file, output_dss_file, months, standard_interval='1HOUR')
+    replace_data(currentAlternative, rtw, pairs, forecast_dss, output_dss_file, months, standard_interval='1HOUR')
 
-    # Generate Flow records needed for plotting
+	# Do we need to convert the evap (used in place of balance flows?) perhaps we at least need to make them negative?
+
+    # TODO: Generate Flow records needed for plotting
     return True
+
+def fix_DMS_parts(currentAlternative, computeOptions):
+    dss_file = computeOptions.getDssFilename()
+    rtw = computeOptions.getRunTimeWindow()
+    
+    run_dir = computeOptions.getRunDirectory()
+    project_dir = Project.getCurrentProject().getProjectDirectory()
+    currentAlternative.addComputeMessage('project_dir: ' + project_dir)
+    currentAlternative.addComputeMessage('run dir: ' + run_dir)
+    balance_period = currentAlternative.getTimeStep()
+    shared_dir = os.path.join(project_dir, 'shared')
+
+    hydro_dss = os.path.join(shared_dir, 'DMS_SacTrnHydroTS.dss')
+    fix_DMS_types_units(hydro_dss)
+    met_dss_file = os.path.join(shared_dir,'DMS_SacTrnMet.dss')
+    fix_DMS_types_units(met_dss_file)
+
+    DSS_Tools.strip_templateID_and_rename_records(hydro_dss,currentAlternative)
+    DSS_Tools.strip_templateID_and_rename_records(met_dss_file,currentAlternative)
 
 
 def computeAlternative(currentAlternative, computeOptions):
     currentAlternative.addComputeMessage("Computing ScriptingAlternative:" + currentAlternative.getName())
     currentAlternative.addComputeMessage('\n')
 
+    # --------- TEMPORARY TO FIX DMS F-PARTS
+    fix_DMS_parts(currentAlternative, computeOptions)
+    # --------- TEMPORARY TO FIX DMS F-PARTS
+
     data_preprocess = forecast_data_preprocess_ResSim_5Res(currentAlternative, computeOptions)
 
     #acc_dep = acc_dep_5Res_ResSim(currentAlternative, computeOptions)
 
-    if data_preprocess and acc_dep:
-        return True
+    if data_preprocess: #and acc_dep:
+    	return True

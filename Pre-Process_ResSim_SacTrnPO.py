@@ -20,7 +20,11 @@ from Simple_DSS_Functions import resample_dss_ts
 from com.rma.io import DssFileManagerImpl
 from java.util import TimeZone
 
-from Acc_Dep_ResSim_SacTrn import computeAlternative as acc_dep_5Res_ResSim
+import Acc_Dep_ResSim_SacTrn
+reload(Acc_Dep_ResSim_SacTrn)
+
+import DSS_Tools
+reload(DSS_Tools)
 
 units_need_fixing = ['radians','tenths',r'langley/min']
 
@@ -281,11 +285,15 @@ def DMS_data_preprocess_ResSim_5Res(currentAlternative, computeOptions):
     fix_DMS_types_units(hydro_dss)
     met_dss_file = os.path.join(shared_dir,'DMS_SacTrnMet.dss')
     fix_DMS_types_units(met_dss_file)
+	
+	# if template IDs exist still, remove them
+    DSS_Tools.strip_templateID_and_rename_records(hydro_dss,currentAlternative)
+    DSS_Tools.strip_templateID_and_rename_records(met_dss_file,currentAlternative)
 
     # calculate meteorological airtemp lapse for the elevation @ Shasta Lake
     currentAlternative.addComputeMessage('lapse infile: '+met_dss_file)
     currentAlternative.addComputeMessage('lapse outfile: '+output_dss_file)
-    airtemp_lapse(met_dss_file, "/MR SAC.-CLEAR CR. TO SAC R./KRDD-AIR TEMPERATURE/TEMP-AIR//1HOUR/245-235.40.53.1.1/",
+    airtemp_lapse(met_dss_file, "/MR SAC.-CLEAR CR. TO SAC R./KRDD-AIR TEMPERATURE/TEMP-AIR//1HOUR/235.40.53.1.1/",
                   0.7, output_dss_file, "Shasta_Lapse")
 
     # add PG flows 1-5 to create PG_SUM record used by ResSim/TCD scripts
@@ -299,33 +307,33 @@ def DMS_data_preprocess_ResSim_5Res(currentAlternative, computeOptions):
     # in the template.
 
     # Trinity: add Generation, G1 & G2, which are powerplant and jet-valve (bypass) flows from the powerplant intake (G3 is the low-level bypass)
-    inflow_records = ['/MR Sac.-Trinity Lake/TRN-Generation Release/Flow//1Hour/225-231.5.125.2.1/',
-                      '/MR Sac.-Trinity Lake/TRN-Outlet Release G1/Flow//1Hour/225-231.5.125.7.1/',
-                      '/MR Sac.-Trinity Lake/TRN-Outlet Release G2/Flow//1Hour/225-231.5.125.8.1/']
+    inflow_records = ['/MR Sac.-Trinity Lake/TRN-Generation Release/Flow//1Hour/231.5.125.2.1/',
+                      '/MR Sac.-Trinity Lake/TRN-Outlet Release G1/Flow//1Hour/231.5.125.7.1/',
+                      '/MR Sac.-Trinity Lake/TRN-Outlet Release G2/Flow//1Hour/231.5.125.8.1/']
     add_flows(currentAlternative, rtw, inflow_records, hydro_dss,
               '/MR Sac.-Trinity Lake/TRN-GenerationG1G2_Sum/Flow//1Hour/ResSim_PreProcess/', output_dss_file)
 
 
     # Lewiston: add Generation and outlet flows which come from the same level
-    inflow_records = ['/MR Sac.-Lewiston Res./LEW-Outlet Release Hrly/Flow//1Hour/226-232.12.125.2.1/',
-                      '/MR Sac.-Lewiston Res./LEW-Generation Release Hrly/Flow//1Hour/226-232.12.125.3.1/']
+    inflow_records = ['/MR Sac.-Lewiston Res./LEW-Outlet Release Hrly/Flow//1Hour/232.12.125.2.1/',
+                      '/MR Sac.-Lewiston Res./LEW-Generation Release Hrly/Flow//1Hour/232.12.125.3.1/']
     add_flows(currentAlternative, rtw, inflow_records, hydro_dss,
               '/MR Sac.-Lewiston Res./LEW-Gen_plus_Outlet Release/Flow//1Hour/ResSim_PreProcess/', output_dss_file)
 
     # Lewiston is still dependent on using Met data from Redding during Jan-Feb-Mar.  Create those spliced Met data records...
     pairs = [
-            ["/MR Sac.-Lewiston Res./TCAC1 - Calc Data-Air temperature/Temp-Air//1Hour/242-232.6.53.1.1/",
-             "/MR Sac.-Clear Cr. to Sac R./KRDD-Air temperature/Temp-Air//1Hour/245-235.40.53.1.1/"],
-            ["/MR Sac.-Lewiston Res./TCAC1 - Calc Data-Dew Point/Temp-DewPoint//1Hour/242-232.6.51.1.1/",
-             "/MR Sac.-Clear Cr. to Sac R./KRDD-Dew Point/Temp-DewPoint//1Hour/245-235.40.51.1.1/"],
-            ["/MR SAC.-LEWISTON RES./TCAC1-SOLAR RADIATION/IRRAD-SOLAR//1HOUR/242-232.5.135.1.1/",
-             "/MR SAC.-CLEAR CR. TO SAC R./RRAC1-SOLAR RADIATION/IRRAD-SOLAR//1HOUR/245-235.41.135.1.1/"],
-            ["/MR Sac.-Lewiston Res./TCAC1-Wind Direction/Dir-Wind/0/1Hour/242-232.5.133.1.2/",
-             "/MR Sac.-Clear Cr. to Sac R./KRDD-Wind Direction/Dir-Wind//1Hour/245-235.40.133.1.2/"],
-            ["/MR Sac.-Lewiston Res./TCAC1-Wind Speed/Speed-Wind//1Hour/242-232.5.133.1.1/",
-             "/MR Sac.-Clear Cr. to Sac R./KRDD-Wind Speed/Speed-Wind//1Hour/245-235.40.133.1.1/"],
-            ["/MR Sac.-Trinity River/TCAC1 - Calc Data-Cloud Cover/%-Cloud Cover//1Day/242-236.9.129.1.1/",
-             "/MR Sac.-Clear Cr. to Sac R./RRAC1-Cloud Cover/%-Cloud Cover//1Hour/245-235.41.129.1.1/"]
+            ["/MR Sac.-Lewiston Res./TCAC1 - Calc Data-Air temperature/Temp-Air//1Hour/232.6.53.1.1/",
+             "/MR Sac.-Clear Cr. to Sac R./KRDD-Air temperature/Temp-Air//1Hour/235.40.53.1.1/"],
+            ["/MR Sac.-Lewiston Res./TCAC1 - Calc Data-Dew Point/Temp-DewPoint//1Hour/232.6.51.1.1/",
+             "/MR Sac.-Clear Cr. to Sac R./KRDD-Dew Point/Temp-DewPoint//1Hour/235.40.51.1.1/"],
+            ["/MR SAC.-LEWISTON RES./TCAC1-SOLAR RADIATION/IRRAD-SOLAR//1HOUR/232.5.135.1.1/",
+             "/MR SAC.-CLEAR CR. TO SAC R./RRAC1-SOLAR RADIATION/IRRAD-SOLAR//1HOUR/235.41.135.1.1/"],
+            ["/MR Sac.-Lewiston Res./TCAC1-Wind Direction/Dir-Wind/0/1Hour/232.5.133.1.2/",
+             "/MR Sac.-Clear Cr. to Sac R./KRDD-Wind Direction/Dir-Wind//1Hour/235.40.133.1.2/"],
+            ["/MR Sac.-Lewiston Res./TCAC1-Wind Speed/Speed-Wind//1Hour/232.5.133.1.1/",
+             "/MR Sac.-Clear Cr. to Sac R./KRDD-Wind Speed/Speed-Wind//1Hour/235.40.133.1.1/"],
+            ["/MR Sac.-Trinity River/TCAC1 - Calc Data-Cloud Cover/%-Cloud Cover//1Day/236.9.129.1.1/",
+             "/MR Sac.-Clear Cr. to Sac R./RRAC1-Cloud Cover/%-Cloud Cover//1Hour/235.41.129.1.1/"]
              ]
 
     months = [1,2,3] #these are the months we are replacing with pair #2
@@ -336,23 +344,23 @@ def DMS_data_preprocess_ResSim_5Res(currentAlternative, computeOptions):
     # Trinity: calc'd total outflow is included in DMS template
     # Keswick: outlet gase only, no summing needed
     # Whiskeytown: outlet + spill = total dam outflow
-    inflow_records = ['/MR Sac.-Whiskeytown Lake/WHI-Outlet Release/Flow//1Hour/227-233.14.125.2.1/',
-                      '/MR Sac.-Whiskeytown Lake/WHI-Generation Release/Flow//1Hour/229-233.14.125.1.1/']
+    inflow_records = ['/MR Sac.-Whiskeytown Lake/WHI-Outlet Release/Flow//1Hour/233.14.125.2.1/',
+                      '/MR Sac.-Whiskeytown Lake/WHI-Generation Release/Flow//1Hour/233.14.125.1.1/']
     add_flows(currentAlternative, rtw, inflow_records, hydro_dss,
               '/MR Sac.-Whiskeytown Lake/WHI-Total Dam Outflow/Flow//1Hour/ResSim_PreProcess/', output_dss_file)
 
     # Shasta: gen + spill + river outlets = total dam release
-    inflow_records = ['/MR Sac.-Shasta Lake/SHA-Generation Release/Flow//1Hour/229-230.11.125.3.1/',
-                      '/MR Sac.-Shasta Lake/SHA-Outlet Release/Flow//1Hour/229-230.11.125.5.1/',
-                      '/MR Sac.-Shasta Lake/SHA-Spill Release/Flow//1Hour/229-230.11.125.4.1/']
+    inflow_records = ['/MR Sac.-Shasta Lake/SHA-Generation Release/Flow//1Hour/230.11.125.3.1/',
+                      '/MR Sac.-Shasta Lake/SHA-Outlet Release/Flow//1Hour/230.11.125.5.1/',
+                      '/MR Sac.-Shasta Lake/SHA-Spill Release/Flow//1Hour/230.11.125.4.1/']
     add_flows(currentAlternative, rtw, inflow_records, hydro_dss,
               '/MR Sac.-Shasta Lake/SHA-Total Dam Outflow/Flow//1Hour/ResSim_PreProcess/', output_dss_file)
 
     # Lewiston: outlet + gen + hatchery + spill = total dam outflow
-    inflow_records = ['/MR Sac.-Lewiston Res./LEW-Outlet Release Hrly/Flow//1Hour/226-232.12.125.2.1/',
-                      '/MR Sac.-Lewiston Res./LEW-Generation Release Hrly/Flow//1Hour/226-232.12.125.3.1/',
-                      '/MR Sac.-Lewiston Res./LEW-Fish Hatchery Release/Flow//1Hour/226-232.12.125.1.1/',
-                      '/MR Sac.-Lewiston Res./LEW-Spill Release Hrly/Flow//1Hour/226-232.12.125.5.1/']
+    inflow_records = ['/MR Sac.-Lewiston Res./LEW-Outlet Release Hrly/Flow//1Hour/232.12.125.2.1/',
+                      '/MR Sac.-Lewiston Res./LEW-Generation Release Hrly/Flow//1Hour/232.12.125.3.1/',
+                      '/MR Sac.-Lewiston Res./LEW-Fish Hatchery Release/Flow//1Hour/232.12.125.1.1/',
+                      '/MR Sac.-Lewiston Res./LEW-Spill Release Hrly/Flow//1Hour/232.12.125.5.1/']
     add_flows(currentAlternative, rtw, inflow_records, hydro_dss,
               '/MR Sac.-Lewiston Res./LEW-Total Dam Outflow/Flow//1Hour/ResSim_PreProcess/', output_dss_file)
 
@@ -365,7 +373,7 @@ def computeAlternative(currentAlternative, computeOptions):
 
     data_preprocess = DMS_data_preprocess_ResSim_5Res(currentAlternative, computeOptions)
 
-    acc_dep = acc_dep_5Res_ResSim(currentAlternative, computeOptions)
+    acc_dep = Acc_Dep_ResSim_SacTrn.computeAlternative(currentAlternative, computeOptions)
 
     if data_preprocess and acc_dep:
         return True
