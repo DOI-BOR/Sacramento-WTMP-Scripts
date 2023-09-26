@@ -15,6 +15,9 @@ import os, sys
 from com.rma.io import DssFileManagerImpl
 from com.rma.model import Project
 #import hec.hecmath.TimeSeriesMath as tsmath
+
+sys.path.append(os.path.join(Project.getCurrentProject().getWorkspacePath(), "scripts"))
+
 from Simple_DSS_Functions import resample_dss_ts
 
 from com.rma.io import DssFileManagerImpl
