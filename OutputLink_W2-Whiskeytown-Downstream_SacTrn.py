@@ -1,6 +1,4 @@
 import sys
-import BoundaryFixes
-reload(BoundaryFixes)
 from hec.heclib.dss import HecDss
 from hec.heclib.util.Heclib import UNDEFINED_DOUBLE
 from hec.io import DSSIdentifier
@@ -11,7 +9,6 @@ import math
 import datetime as dt
 import DSS_Tools
 reload(DSS_Tools)
-
 
 ##
 #
@@ -43,16 +40,15 @@ def computeAlternative(currentAlternative, computeOptions):
     currentAlternative.addComputeMessage('\n')
     rtw = computeOptions.getRunTimeWindow()
 
-    # Adding flow to keep keswick balanced
+    # Adding flow to keep keswick balanced, coming from independent DSS files, so can't
+    # use DSS_Tools (currently).  Only add first two input locations!!
     # ------------------------------------------------------------------------------------ 
 
     outputlocations = currentAlternative.getOutputDataLocations()
-    outputpath = currentAlternative.createOutputTimeSeries(outputlocations[0])
-    
+    outputpath = currentAlternative.createOutputTimeSeries(outputlocations[0])    
     if len(outputlocations) > 1:
         currentAlternative.addComputeMessage("Found more than 1 output datapath locations. Using the first, {0}".format(outputlocations[0]))
     outputpath = DSS_Tools.fixInputLocationFpart(currentAlternative, str(outputpath))
-
     currentAlternative.addComputeMessage("Outputting to {0}".format(outputpath))
 
     currentAlternative.addComputeMessage("\n##### Adding Timeseries #####")
@@ -67,7 +63,7 @@ def computeAlternative(currentAlternative, computeOptions):
     all_values = base_TS.values
     units = base_TS.units
 
-    for other_loc in locations[1:]:
+    for other_loc in locations[1:2]:
         new_values = []
         other_tspath, other_DSSPath = DSS_Tools.getDataLocationDSSInfo(other_loc, currentAlternative, computeOptions)
         currentAlternative.addComputeMessage("Adding {0}".format(other_tspath))

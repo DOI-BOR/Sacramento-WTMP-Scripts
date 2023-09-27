@@ -10,7 +10,96 @@ from hec.heclib.util.Heclib import UNDEFINED_DOUBLE
 import hec.hecmath.TimeSeriesMath as tsmath
 from com.rma.model import Project
 import os,shutil,copy
-from java.util import Vector
+from java.util import Vector, Date
+
+from datetime import datetime
+from hec.heclib.util import HecTime  # Replace with actual import
+
+units_need_fixing = ['radians','tenths',r'langley/min']
+
+def fix_DMS_types_units(dss_file):
+    '''This method was implemented to change data types to PER-AVER that are not coming from the DMS that way'''
+    dss = HecDss.open(dss_file)
+    recs = dss.getPathnameList()
+    for r in recs:
+        tsm = dss.read(r)
+        rlow = r.lower()
+        if "/flow" in rlow or "/1day/" in rlow:
+            tsm.setType('PER-AVER')
+            dss.write(tsm)
+        if tsm.getUnits() in units_need_fixing:
+            if tsm.getUnits() == 'tenths':
+                # save off a copy of cloud record in 0-1 for ResSim
+                tsc = tsm.getData()
+                rec_parts = tsc.fullName.split('/')
+                rec_parts[3] += '-FRAC'
+                tsc.fullName = '/'.join(rec_parts)
+                tsc.units = 'FRAC'
+                for i in range(len(tsc.values)) :
+                    tsc.values[i] = tsc.values[i] / 10.0                
+                dss.write(tsc)
+            else:
+                tsm = standardize_units_tsm(tsm)
+                dss.write(tsm)
+    dss.close()
+
+def standardize_units_tsm(tsm):
+    tsc = tsm.getData()
+    tsc = standardize_units_tsc(tsc)
+    tsm.setData(tsc)
+    return tsm
+
+def standardize_units_tsc(tsc):
+    if tsc.units == 'radians':
+        for i in range(len(tsc.values)) :
+            tsc.values[i] = tsc.values[i] / 2*3.141592653589793 * 360.0
+        tsc.units = 'deg'
+    if tsc.units == r'langley/min':
+        conv = 41840.0 / 60.0  # lang/min * 41840 j/m2 * 1 min/60 s  j/m2/s = W/m2
+        for i in range(len(tsc.values)) :
+            tsc.values[i] = tsc.values[i] * conv
+        tsc.units = r'W/m2'
+    return tsc
+
+
+def standardize_interval(tsm, interval, makePerAver=True):
+    tsc = tsm.getData()
+    if interval.lower()=='1hour':
+        intint = 60
+    elif interval.lower()=='1day':
+        intint=1440
+    else:
+        print('internal not supported:',interval)
+        sys.exit(-1)
+
+    if tsc.interval != intint:
+        if makePerAver:
+            #tsc.type = 'PER-AVER'  # make sure it's per-aver ... we are
+            tsm.setType('PER-AVER')
+        return tsm.transformTimeSeries(interval, "", "AVE")
+    else:
+        return tsm
+
+
+def data_from_dss(dss_file,dss_rec,starttime_str, endtime_str,):
+    dssFm = HecDss.open(dss_file)        
+    tsc = dssFm.read(dss_rec, starttime_str, endtime_str, False).getData()
+    dssFm.close()
+    return tsc.values
+ 
+
+def hectime_to_datetime(tsc):
+
+    dtt = []
+    for j in range(tsc.numberValues):
+        # Assuming hectime can be converted to Java Date or has method to get the equivalent
+        java_date = tsc.getHecTime(j).getJavaDate(0)  
+	    
+        # Convert Java Date to Python datetime
+        timestamp = (java_date.getTime() / 1000)
+        dtt.append(datetime.fromtimestamp(timestamp))
+
+    return dtt
 
 def fixInputLocationFpart(currentAlternative, tspath):
     new_fpart_start = ':'.join(currentAlternative.getInputFPart().split(':')[:-1])

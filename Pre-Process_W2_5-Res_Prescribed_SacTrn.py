@@ -1,8 +1,11 @@
 
 #from com.rma.io import DssFileManagerImpl
-import os,time#,shutil
+import os,time,sys#,shutil
 from distutils.dir_util import copy_tree
-
+from com.rma.model import Project
+sys.path.append(os.path.join(Project.getCurrentProject().getWorkspacePath(), "scripts"))
+import DMS_preprocess
+reload(DMS_preprocess)
 
 W2_models_for_input_copy = ['W2 Trinity Prescribed','W2 Lewiston Prescribed','W2 Whiskeytown Prescribed',
                             'W2 Shasta Prescribed','W2 Keswick Prescribed']
@@ -76,8 +79,10 @@ def computeAlternative(currentAlternative, computeOptions):
             # now, W2 model alternative directory is confiured for startyear, ready for the W2 plugin to
             # work it's magic on the W2_con file and execture simulation    
 
+	DMS_preprocess.preprocess_W2_5Res(currentAlternative, computeOptions)
+
 	# remove me most of the time
-	#backdate_W2_files_to_skip_compute(run_dir)
+	backdate_W2_files_to_skip_compute(run_dir)
     
     return True
 
