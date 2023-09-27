@@ -19,71 +19,14 @@ sys.path.append(os.path.join(Project.getCurrentProject().getWorkspacePath(), "sc
 
 import DSS_Tools
 reload(DSS_Tools)
+import equilibrium_temp
+reload(equilibrium_temp)
 
 from com.rma.io import DssFileManagerImpl
 from java.util import TimeZone
 
 from Acc_Dep_ResSim_SacTrn import computeAlternative as acc_dep_5Res_ResSim
 
-units_need_fixing = ['radians','tenths',r'langley/min']
-
-def fix_DMS_types_units(dss_file):
-    '''This method was implemented to change data types to PER-AVER that are not coming from the DMS that way'''
-    dss = HecDss.open(dss_file)
-    recs = dss.getPathnameList()
-    for r in recs:
-        tsm = dss.read(r)
-        rlow = r.lower()
-        if "/flow" in rlow or "/1day/" in rlow:
-            tsm.setType('PER-AVER')
-            dss.write(tsm)
-        if tsm.getUnits() in units_need_fixing:
-            tsm = standardize_units_tsm(tsm)
-            dss.write(tsm)
-    dss.close()
-
-def standardize_units_tsm(tsm):
-    tsc = tsm.getData()
-    tsc = standardize_units_tsc(tsc)
-    tsm.setData(tsc)
-    return tsm
-
-def standardize_units_tsc(tsc):
-    if tsc.units == 'radians':
-        for i in range(len(tsc.values)) :
-            tsc.values[i] = tsc.values[i] / 2*3.141592653589793 * 360.0
-        tsc.units = 'deg'
-    if tsc.units == 'tenths':
-        # this is not really 'tenths', but in the data from DMS, it descirbes data ranging from 0-10.
-        # ResSim expects 0-1 for cloud cover
-        for i in range(len(tsc.values)) :
-            tsc.values[i] = tsc.values[i] / 10.0
-        tsc.units = 'FRAC'
-    if tsc.units == r'langley/min':
-        conv = 41840.0 / 60.0  # lang/min * 41840 j/m2 * 1 min/60 s  j/m2/s = W/m2
-        for i in range(len(tsc.values)) :
-            tsc.values[i] = tsc.values[i] * conv
-        tsc.units = r'W/m2'
-    return tsc
-
-
-def standardize_interval(tsm, interval, makePerAver=True):
-    tsc = tsm.getData()
-    if interval.lower()=='1hour':
-        intint = 60
-    elif interval.lower()=='1day':
-        intint=1440
-    else:
-        print('internal not supported:',interval)
-        sys.exit(-1)
-
-    if tsc.interval != intint:
-        if makePerAver:
-            #tsc.type = 'PER-AVER'  # make sure it's per-aver ... we are
-            tsm.setType('PER-AVER')
-        return tsm.transformTimeSeries(interval, "", "AVE")
-    else:
-        return tsm
 
 def replace_data(currentAlt, timewindow, pairs, dss_file, dss_outfile, months, standard_interval=None):
     starttime_str = timewindow.getStartTimeString()
@@ -97,7 +40,7 @@ def replace_data(currentAlt, timewindow, pairs, dss_file, dss_outfile, months, s
         currentAlt.addComputeMessage('Replacing data for {0} with {1} during {2}'.format(pair[0], pair[1], months))
         base = dssFm.read(pair[0], starttime_str, endtime_str, False)
         if standard_interval is not None:
-            base = standardize_interval(base,standard_interval)
+            base = DSS_Tools.standardize_interval(base,standard_interval)
         base_data = base.getData()
         base_values = base_data.values
         base_hectimes = base_data.times
@@ -108,7 +51,7 @@ def replace_data(currentAlt, timewindow, pairs, dss_file, dss_outfile, months, s
 
         alt = dssFm.read(pair[1], starttime_str, endtime_str, False)
         if standard_interval is not None:
-            alt = standardize_interval(alt,standard_interval)
+            alt = DSS_Tools.standardize_interval(alt,standard_interval)
         alt_data = alt.getData()
         alt_values = alt_data.values
         alt_hectimes = alt_data.times
@@ -164,6 +107,37 @@ def check_start_and_end(values, times, startime, endtime):
         values = values[:(len(times) - st_offset)]
         times = times[:(len(times) - st_offset)]
     return values, times
+       
+def eq_temp(rtw,at,cl,ws,sr,td,eq_temp_out):
+    starttime_str = rtw.getStartTimeString()
+    endtime_str = rtw.getEndTimeString()
+
+	# get at data and times in the formats needed
+    dssFm = HecDss.open(at[0])        
+    tsc = dssFm.read(at[1], starttime_str, endtime_str, False).getData()
+    tsc_int_times = tsc.times
+    dtt = DSS_Tools.hectime_to_datetime(tsc)
+    at_data = tsc.values
+    dssFm.close()
+	# get the rest of the data over the same period
+    cl_data = DSS_Tools.data_from_dss(cl[0],cl[1],starttime_str,endtime_str)
+    ws_data = DSS_Tools.data_from_dss(ws[0],ws[1],starttime_str,endtime_str)
+    sr_data = DSS_Tools.data_from_dss(sr[0],sr[1],starttime_str,endtime_str)
+    td_data = DSS_Tools.data_from_dss(td[0],td[1],starttime_str,endtime_str)
+
+    Te = equilibrium_temp.calc_equilibrium_temp(dtt,at_data,cl_data,sr_data,td_data,ws_data)
+    
+    print('writing: ',eq_temp_out[1])
+    tsc = TimeSeriesContainer()
+    tsc.times = tsc_int_times
+    tsc.fullName = eq_temp_out[1]
+    tsc.values = Te
+    tsc.units = 'C'
+    tsc.type = 'PER-AVER'
+    tsc.numberValues = len(tsc.values)
+    dssFmOut = HecDss.open(eq_temp_out[0])
+    dssFmOut.write(tsc)
+    dssFmOut.close()
 
 
 def forecast_data_preprocess_ResSim_5Res(currentAlternative, computeOptions):
@@ -179,15 +153,10 @@ def forecast_data_preprocess_ResSim_5Res(currentAlternative, computeOptions):
 
     output_dss_file = os.path.join(shared_dir,'forecast_SacTrn_ResSim_Pre-Process.dss')
     forecast_dss = os.path.join(shared_dir,'WTMP_SacTrn_Forecast.dss')
-
-    hydro_dss = os.path.join(shared_dir, 'DMS_SacTrnHydroTS.dss')
-    fix_DMS_types_units(hydro_dss)
-    met_dss_file = os.path.join(shared_dir,'DMS_SacTrnMet.dss')
-    fix_DMS_types_units(met_dss_file)
-
+    DSS_Tools.fix_DMS_types_units(forecast_dss)
     
     # calculate meteorological airtemp lapse for the elevation @ Shasta Lake
-    currentAlternative.addComputeMessage('lapse infile: '+met_dss_file)
+    currentAlternative.addComputeMessage('lapse infile: '+forecast_dss)
     currentAlternative.addComputeMessage('lapse outfile: '+output_dss_file)
     DSS_Tools.airtemp_lapse(forecast_dss, "/MR SAC.-CLEAR CR. TO SAC R./KRDD/TEMP-AIR//1HOUR/SACTRN_BC_SCRIPT/",
                   0.7, output_dss_file, "Shasta_Lapse")
@@ -205,12 +174,24 @@ def forecast_data_preprocess_ResSim_5Res(currentAlternative, computeOptions):
             ["/MR Sac.-Lewiston Res./TCAC1/Speed-Wind//1Hour/SACTRN_BC_SCRIPT/",
              "/MR Sac.-Clear Cr. to Sac R./KRDD/Speed-Wind//1Hour/SACTRN_BC_SCRIPT/"],
             ["/MR Sac.-Trinity River/TCAC1/%-Cloud Cover//1Day/SACTRN_BC_SCRIPT/",
-             "/MR Sac.-Clear Cr. to Sac R./RRAC1/%-Cloud Cover//1Hour/SACTRN_BC_SCRIPT/"]
+             "/MR Sac.-Clear Cr. to Sac R./RRAC1/%-Cloud Cover//1Hour/SACTRN_BC_SCRIPT/"],
+            ["/MR Sac.-Trinity River/TCAC1/%-Cloud Cover-FRAC//1Day/SACTRN_BC_SCRIPT/",
+             "/MR Sac.-Clear Cr. to Sac R./RRAC1/%-Cloud Cover-FRAC//1Hour/SACTRN_BC_SCRIPT/"]
              ]
     months = [1,2,3] #these are the months we are replacing with pair #2
     replace_data(currentAlternative, rtw, pairs, forecast_dss, output_dss_file, months, standard_interval='1HOUR')
 
-	# Do we need to convert the evap (used in place of balance flows?) perhaps we at least need to make them negative?
+    currentAlternative.addComputeMessage("Computing equilibrium temperature, this may take a while...")
+    eq_temp(rtw,
+            [forecast_dss,"/MR Sac.-Clear Cr. to Sac R./KRDD/Temp-Air//1Hour/SACTRN_BC_SCRIPT/"],
+			[forecast_dss,"/MR Sac.-Clear Cr. to Sac R./RRAC1/%-Cloud Cover//1Hour/SACTRN_BC_SCRIPT/"],
+			[forecast_dss,"/MR SAC.-CLEAR CR. TO SAC R./RRAC1/IRRAD-SOLAR//1HOUR/SACTRN_BC_SCRIPT/"],
+			[forecast_dss,"/MR Sac.-Clear Cr. to Sac R./KRDD/Speed-Wind//1Hour/SACTRN_BC_SCRIPT/"],	
+			[forecast_dss,"/MR Sac.-Clear Cr. to Sac R./KRDD/Temp-DewPoint//1Hour/SACTRN_BC_SCRIPT/"],
+            [output_dss_file,"/MR Sac.-Clear Cr. to Sac R./KRDD/Temp-Equil//1Hour/sactrn_bc_script/"]
+		   )
+
+	# TODO: Perhaps generate tributary flows/temps based on exceedence and/or temp regressions?
 
     # TODO: Generate Flow records needed for plotting
     return True
@@ -227,9 +208,9 @@ def fix_DMS_parts(currentAlternative, computeOptions):
     shared_dir = os.path.join(project_dir, 'shared')
 
     hydro_dss = os.path.join(shared_dir, 'DMS_SacTrnHydroTS.dss')
-    fix_DMS_types_units(hydro_dss)
+    DSS_Tools.fix_DMS_types_units(hydro_dss)
     met_dss_file = os.path.join(shared_dir,'DMS_SacTrnMet.dss')
-    fix_DMS_types_units(met_dss_file)
+    DSS_Tools.fix_DMS_types_units(met_dss_file)
 
     DSS_Tools.strip_templateID_and_rename_records(hydro_dss,currentAlternative)
     DSS_Tools.strip_templateID_and_rename_records(met_dss_file,currentAlternative)
@@ -240,7 +221,7 @@ def computeAlternative(currentAlternative, computeOptions):
     currentAlternative.addComputeMessage('\n')
 
     # --------- TEMPORARY TO FIX DMS F-PARTS
-    fix_DMS_parts(currentAlternative, computeOptions)
+    #fix_DMS_parts(currentAlternative, computeOptions)
     # --------- TEMPORARY TO FIX DMS F-PARTS
 
     data_preprocess = forecast_data_preprocess_ResSim_5Res(currentAlternative, computeOptions)
