@@ -50,6 +50,10 @@ def fix_DMS_types_units(dss_file):
                 for i in range(len(tsc.values)) :
                     tsc.values[i] = tsc.values[i] / 10.0                
                 dss.write(tsc)
+            #if tsm.getUnits() == 'deg':
+            #	if tsm.max() > 400.0:					
+            #		tsm_fixed=tsm.multiply(0.10)
+            #    	dss.write(tsm)					
             else:
                 tsm = standardize_units_tsm(tsm)
                 dss.write(tsm)
@@ -64,7 +68,7 @@ def standardize_units_tsm(tsm):
 def standardize_units_tsc(tsc):
     if tsc.units == 'radians':
         for i in range(len(tsc.values)) :
-            tsc.values[i] = tsc.values[i] / 2*3.141592653589793 * 360.0
+            tsc.values[i] = tsc.values[i] / (2*3.141592653589793) * 360.0
         tsc.units = 'deg'
     if tsc.units == r'langley/min':
         conv = 41840.0 / 60.0  # lang/min * 41840 j/m2 * 1 min/60 s  j/m2/s = W/m2

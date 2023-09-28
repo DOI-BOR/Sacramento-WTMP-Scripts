@@ -136,8 +136,15 @@ def eq_temp(rtw,at,cl,ws,sr,td,eq_temp_out):
     tsc.units = 'C'
     tsc.type = 'INST-VAL'
     tsc.numberValues = len(tsc.values)
+
+    tsm = tsmath(tsc)
+    tsm_day = DSS_Tools.standardize_interval(tsm,'1day')
+    tsm_wk = DSS_Tools.standardize_interval(tsm,'1week')
+        
     dssFmOut = HecDss.open(eq_temp_out[0])
     dssFmOut.write(tsc)
+    dssFmOut.write(tsm_day)
+    dssFmOut.write(tsm_wk)
     dssFmOut.close()
 
 
