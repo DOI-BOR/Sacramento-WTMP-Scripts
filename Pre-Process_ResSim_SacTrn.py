@@ -124,7 +124,8 @@ def eq_temp(rtw,at,cl,ws,sr,td,eq_temp_out):
     ws_data = DSS_Tools.data_from_dss(ws[0],ws[1],starttime_str,endtime_str)
     sr_data = DSS_Tools.data_from_dss(sr[0],sr[1],starttime_str,endtime_str)
     td_data = DSS_Tools.data_from_dss(td[0],td[1],starttime_str,endtime_str)
-
+    
+	# calc_equilibrium_temp(dtt, at, cl, sr, td, ws)
     Te = equilibrium_temp.calc_equilibrium_temp(dtt,at_data,cl_data,sr_data,td_data,ws_data)
     
     print('writing: ',eq_temp_out[1])
@@ -133,7 +134,7 @@ def eq_temp(rtw,at,cl,ws,sr,td,eq_temp_out):
     tsc.fullName = eq_temp_out[1]
     tsc.values = Te
     tsc.units = 'C'
-    tsc.type = 'PER-AVER'
+    tsc.type = 'INST-VAL'
     tsc.numberValues = len(tsc.values)
     dssFmOut = HecDss.open(eq_temp_out[0])
     dssFmOut.write(tsc)
@@ -182,11 +183,12 @@ def forecast_data_preprocess_ResSim_5Res(currentAlternative, computeOptions):
     replace_data(currentAlternative, rtw, pairs, forecast_dss, output_dss_file, months, standard_interval='1HOUR')
 
     currentAlternative.addComputeMessage("Computing equilibrium temperature, this may take a while...")
+    # eq_temp(rtw,at,cl,ws,sr,td,eq_temp_out)
     eq_temp(rtw,
             [forecast_dss,"/MR Sac.-Clear Cr. to Sac R./KRDD/Temp-Air//1Hour/SACTRN_BC_SCRIPT/"],
-			[forecast_dss,"/MR Sac.-Clear Cr. to Sac R./RRAC1/%-Cloud Cover//1Hour/SACTRN_BC_SCRIPT/"],
+			[forecast_dss,"/MR Sac.-Clear Cr. to Sac R./RRAC1/%-Cloud Cover-FRAC//1Hour/SACTRN_BC_SCRIPT/"],
+			[forecast_dss,"/MR Sac.-Clear Cr. to Sac R./KRDD/Speed-Wind//1Hour/SACTRN_BC_SCRIPT/"],
 			[forecast_dss,"/MR SAC.-CLEAR CR. TO SAC R./RRAC1/IRRAD-SOLAR//1HOUR/SACTRN_BC_SCRIPT/"],
-			[forecast_dss,"/MR Sac.-Clear Cr. to Sac R./KRDD/Speed-Wind//1Hour/SACTRN_BC_SCRIPT/"],	
 			[forecast_dss,"/MR Sac.-Clear Cr. to Sac R./KRDD/Temp-DewPoint//1Hour/SACTRN_BC_SCRIPT/"],
             [output_dss_file,"/MR Sac.-Clear Cr. to Sac R./KRDD/Temp-Equil//1Hour/sactrn_bc_script/"]
 		   )
