@@ -68,8 +68,10 @@ def standardize_interval(tsm, interval, makePerAver=True):
         intint = 60
     elif interval.lower()=='1day':
         intint=1440
+    elif interval.lower()=='1week':
+        intint=10800
     else:
-        print('internal not supported:',interval)
+        print('interval not supported:',interval)
         sys.exit(-1)
 
     if tsc.interval != intint:
