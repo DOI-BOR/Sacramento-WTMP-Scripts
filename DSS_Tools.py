@@ -15,52 +15,6 @@ from java.util import Vector, Date
 from datetime import datetime
 from hec.heclib.util import HecTime  # Replace with actual import
 
-units_need_fixing = ['radians','tenths',r'langley/min']
-
-def fix_DMS_types_units(dss_file):
-    '''This method was implemented to change data types to PER-AVER that are not coming from the DMS that way'''
-    dss = HecDss.open(dss_file)
-    recs = dss.getPathnameList()
-    for r in recs:
-        tsm = dss.read(r)
-        rlow = r.lower()
-        if "/flow" in rlow or "/1day/" in rlow:
-            tsm.setType('PER-AVER')
-            dss.write(tsm)
-        if tsm.getUnits() in units_need_fixing:
-            if tsm.getUnits() == 'tenths':
-                # save off a copy of cloud record in 0-1 for ResSim
-                tsc = tsm.getData()
-                rec_parts = tsc.fullName.split('/')
-                rec_parts[3] += '-FRAC'
-                tsc.fullName = '/'.join(rec_parts)
-                tsc.units = 'FRAC'
-                for i in range(len(tsc.values)) :
-                    tsc.values[i] = tsc.values[i] / 10.0                
-                dss.write(tsc)
-            else:
-                tsm = standardize_units_tsm(tsm)
-                dss.write(tsm)
-    dss.close()
-
-def standardize_units_tsm(tsm):
-    tsc = tsm.getData()
-    tsc = standardize_units_tsc(tsc)
-    tsm.setData(tsc)
-    return tsm
-
-def standardize_units_tsc(tsc):
-    if tsc.units == 'radians':
-        for i in range(len(tsc.values)) :
-            tsc.values[i] = tsc.values[i] / 2*3.141592653589793 * 360.0
-        tsc.units = 'deg'
-    if tsc.units == r'langley/min':
-        conv = 41840.0 / 60.0  # lang/min * 41840 j/m2 * 1 min/60 s  j/m2/s = W/m2
-        for i in range(len(tsc.values)) :
-            tsc.values[i] = tsc.values[i] * conv
-        tsc.units = r'W/m2'
-    return tsc
-
 
 def standardize_interval(tsm, interval, makePerAver=True):
     tsc = tsm.getData()

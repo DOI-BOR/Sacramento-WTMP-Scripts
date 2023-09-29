@@ -27,7 +27,7 @@ reload(Acc_Dep_ResSim_SacTrn)
 import DSS_Tools
 reload(DSS_Tools)
 
-units_need_fixing = ['radians','tenths',r'langley/min']
+units_need_fixing = ['radians','tenths']
 
 def fix_DMS_types_units(dss_file):
     '''This method was implemented to change data types to PER-AVER that are not coming from the DMS that way'''
@@ -45,37 +45,22 @@ def fix_DMS_types_units(dss_file):
                 tsc = tsm.getData()
                 rec_parts = tsc.fullName.split('/')
                 rec_parts[3] += '-FRAC'
-                tsc.fullname = '/'.join(rec_parts)
+                tsc.fullName = '/'.join(rec_parts)
                 tsc.units = 'FRAC'
                 for i in range(len(tsc.values)) :
                     tsc.values[i] = tsc.values[i] / 10.0                
-                dss.write(tsc)
-            #if tsm.getUnits() == 'deg':
-            #	if tsm.max() > 400.0:					
-            #		tsm_fixed=tsm.multiply(0.10)
-            #    	dss.write(tsm)					
-            else:
-                tsm = standardize_units_tsm(tsm)
-                dss.write(tsm)
+                dss.write(tsc)				
+            if tsm.getUnits() == 'radians':
+                # save off a copy in deg
+                tsc = tsm.getData()
+                rec_parts = tsc.fullName.split('/')
+                rec_parts[3] += '-DEG'
+                tsc.fullName = '/'.join(rec_parts)
+                tsc.units = 'deg'
+                for i in range(len(tsc.values)) :
+                    tsc.values[i] = tsc.values[i] / (2*3.141592653589793) * 360.0                
+                dss.write(tsc)	
     dss.close()
-
-def standardize_units_tsm(tsm):
-    tsc = tsm.getData()
-    tsc = standardize_units_tsc(tsc)
-    tsm.setData(tsc)
-    return tsm
-
-def standardize_units_tsc(tsc):
-    if tsc.units == 'radians':
-        for i in range(len(tsc.values)) :
-            tsc.values[i] = tsc.values[i] / (2*3.141592653589793) * 360.0
-        tsc.units = 'deg'
-    if tsc.units == r'langley/min':
-        conv = 41840.0 / 60.0  # lang/min * 41840 j/m2 * 1 min/60 s  j/m2/s = W/m2
-        for i in range(len(tsc.values)) :
-            tsc.values[i] = tsc.values[i] * conv
-        tsc.units = r'W/m2'
-    return tsc
 
 
 
@@ -161,7 +146,7 @@ def replace_data(currentAlt, timewindow, pairs, dss_file, dss_outfile, months, s
         for i in range(len(base_values)):
             if base_data.getHecTime(i).month() in months:
                 base_values[i] = alt_values[i]
-                print('replaced {0}'.format(base_data.getHecTime(i)))
+                #print('replaced {0}'.format(base_data.getHecTime(i)))
 
         new_pathname = base_data.fullName.split('/')
         alt_pathname = alt_data.fullName.split('/')
@@ -194,7 +179,7 @@ def splice_lewiston_met_data(currentAlternative, rtw, met_dss_file, output_dss_f
             ["/MR SAC.-LEWISTON RES./TCAC1-SOLAR RADIATION/IRRAD-SOLAR//1HOUR/232.5.135.1.1/",
              "/MR SAC.-CLEAR CR. TO SAC R./RRAC1-SOLAR RADIATION/IRRAD-SOLAR//1HOUR/235.41.135.1.1/"],
             ["/MR Sac.-Lewiston Res./TCAC1-Wind Direction/Dir-Wind/0/1Hour/232.5.133.1.2/",
-             "/MR Sac.-Clear Cr. to Sac R./KRDD-Wind Direction/Dir-Wind//1Hour/235.40.133.1.2/"],
+             "/MR Sac.-Clear Cr. to Sac R./KRDD-Wind Direction/Dir-Wind-Deg//1Hour/235.40.133.1.2/"],
             ["/MR Sac.-Lewiston Res./TCAC1-Wind Speed/Speed-Wind//1Hour/232.5.133.1.1/",
              "/MR Sac.-Clear Cr. to Sac R./KRDD-Wind Speed/Speed-Wind//1Hour/235.40.133.1.1/"],
             ["/MR Sac.-Trinity River/TCAC1 - Calc Data-Cloud Cover/%-Cloud Cover//1Day/236.9.129.1.1/",
@@ -272,9 +257,9 @@ def preprocess_W2_5Res(currentAlternative, computeOptions):
     output_dss_file = os.path.join(shared_dir,'DMS_SacTrn_ResSim_Pre-Process.dss') 
 
     hydro_dss = os.path.join(shared_dir, 'DMS_SacTrnHydroTS.dss')
-    DSS_Tools.fix_DMS_types_units(hydro_dss)
+    fix_DMS_types_units(hydro_dss)
     met_dss_file = os.path.join(shared_dir,'DMS_SacTrnMet.dss')
-    DSS_Tools.fix_DMS_types_units(met_dss_file)
+    fix_DMS_types_units(met_dss_file)
 
     splice_lewiston_met_data(currentAlternative, rtw, met_dss_file, output_dss_file)
     compute_5Res_outflows(currentAlternative, rtw, hydro_dss, output_dss_file)
@@ -294,9 +279,9 @@ def preprocess_ResSim_5Res(currentAlternative, computeOptions):
     output_dss_file = os.path.join(shared_dir,'DMS_SacTrn_ResSim_Pre-Process.dss')
 
     hydro_dss = os.path.join(shared_dir, 'DMS_SacTrnHydroTS.dss')
-    DSS_Tools.fix_DMS_types_units(hydro_dss)
+    fix_DMS_types_units(hydro_dss)
     met_dss_file = os.path.join(shared_dir,'DMS_SacTrnMet.dss')
-    DSS_Tools.fix_DMS_types_units(met_dss_file)
+    fix_DMS_types_units(met_dss_file)
     
     # if template IDs exist still, remove them
     #DSS_Tools.strip_templateID_and_rename_records(hydro_dss,currentAlternative)
