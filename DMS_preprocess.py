@@ -27,7 +27,7 @@ reload(Acc_Dep_ResSim_SacTrn)
 import DSS_Tools
 reload(DSS_Tools)
 
-units_need_fixing = ['radians','tenths']
+units_need_fixing = ['tenths','deg',] #'radians',]
 
 def fix_DMS_types_units(dss_file):
     '''This method was implemented to change data types to PER-AVER that are not coming from the DMS that way'''
@@ -39,6 +39,7 @@ def fix_DMS_types_units(dss_file):
         if "/flow" in rlow or "/1day/" in rlow:
             tsm.setType('PER-AVER')
             dss.write(tsm)
+        
         if tsm.getUnits() in units_need_fixing:
             if tsm.getUnits() == 'tenths':
                 # save off a copy of cloud record in 0-1 for ResSim
@@ -49,7 +50,7 @@ def fix_DMS_types_units(dss_file):
                 tsc.units = 'FRAC'
                 for i in range(len(tsc.values)) :
                     tsc.values[i] = tsc.values[i] / 10.0                
-                dss.write(tsc)				
+                dss.write(tsc)
             if tsm.getUnits() == 'radians':
                 # save off a copy in deg
                 tsc = tsm.getData()
@@ -59,10 +60,18 @@ def fix_DMS_types_units(dss_file):
                 tsc.units = 'deg'
                 for i in range(len(tsc.values)) :
                     tsc.values[i] = tsc.values[i] / (2*3.141592653589793) * 360.0                
-                dss.write(tsc)	
+                dss.write(tsc)
+            if tsm.getUnits() == 'deg':
+                # save off a copy in redians
+                tsc = tsm.getData()
+                rec_parts = tsc.fullName.split('/')
+                rec_parts[3] += '-RADIANS'
+                tsc.fullName = '/'.join(rec_parts)
+                tsc.units = 'radians'
+                for i in range(len(tsc.values)) :
+                    tsc.values[i] = tsc.values[i] / 360.0 * (2*3.141592653589793)                
+                dss.write(tsc)
     dss.close()
-
-
 
 def airtemp_lapse(dss_file,dss_rec,lapse_in_C,dss_outfile,f_part):
     dss = HecDss.open(dss_file)
@@ -80,6 +89,37 @@ def airtemp_lapse(dss_file,dss_rec,lapse_in_C,dss_outfile,f_part):
     dss_out = HecDss.open(dss_outfile)
     dss_out.write(tsc)
     dss_out.close()
+
+def calculate_relative_humidity(air_temp, dewpoint_temp):
+    """
+    Calculate Relative Humidity given the air temperature and dewpoint temperature - August-Roche-Magnus approximation
+    
+    :param air_temp: Air Temperature in degrees Celsius
+    :param dewpoint_temp: Dew Point Temperature in degrees Celsius
+    :return: Relative Humidity in percentage
+    """
+    numerator = (112.0 - 0.1 * dewpoint_temp + air_temp)
+    denominator = (112.0 + 0.9 * air_temp)
+    exponent = ((17.62 * dewpoint_temp) / (243.12 + dewpoint_temp)) - ((17.62 * air_temp) / (243.12 + air_temp))
+    relative_humidity = 100.0 * (numerator / denominator) * math.exp(exponent)	
+    return max(0.01,min(100.0,relative_humidity))
+
+def relhum_from_at_dp(met_dss_file,at_path,dp_path):
+    dss = HecDss.open(met_dss_file)
+    tsc = dss.read(at_path).getData()
+    dp_data = DSS_Tools.data_from_dss(met_dss_file,dp_path,None,None)
+    for i in range(tsc.numberValues):
+        tsc.values[i] = calculate_relative_humidity(tsc.values[i],dp_data[i])
+    parts = tsc.fullName.split('/')
+    parts[2] = parts[2][:5]
+    parts[3] = 'RELHUM-FROM-AT-DP'
+    parts[6] = parts[6]+'-DERIVED'
+    new_pathname = '/'.join(parts)
+    tsc.fullName = new_pathname
+    tsc.units = '%'
+    print('writing: ',new_pathname)
+    dss.write(tsc)
+    dss.close()
 
 
 def check_start_and_end(values, times, startime, endtime):
@@ -168,7 +208,7 @@ def replace_data(currentAlt, timewindow, pairs, dss_file, dss_outfile, months, s
         dssFmOut.close()
 
 
-def splice_lewiston_met_data(currentAlternative, rtw, met_dss_file, output_dss_file):
+def splice_lewiston_met_data(currentAlternative, rtw, met_dss_file, output_dss_file, months=[1,2,3]):
 
     # Lewiston is still dependent on using Met data from Redding during Jan-Feb-Mar.  Create those spliced Met data records...
     pairs = [
@@ -178,8 +218,8 @@ def splice_lewiston_met_data(currentAlternative, rtw, met_dss_file, output_dss_f
              "/MR Sac.-Clear Cr. to Sac R./KRDD-Dew Point/Temp-DewPoint//1Hour/235.40.51.1.1/"],
             ["/MR SAC.-LEWISTON RES./TCAC1-SOLAR RADIATION/IRRAD-SOLAR//1HOUR/232.5.135.1.1/",
              "/MR SAC.-CLEAR CR. TO SAC R./RRAC1-SOLAR RADIATION/IRRAD-SOLAR//1HOUR/235.41.135.1.1/"],
-            ["/MR Sac.-Lewiston Res./TCAC1-Wind Direction/Dir-Wind/0/1Hour/232.5.133.1.2/",
-             "/MR Sac.-Clear Cr. to Sac R./KRDD-Wind Direction/Dir-Wind-Deg//1Hour/235.40.133.1.2/"],
+            ["/MR Sac.-Lewiston Res./TCAC1-Wind Direction/Dir-Wind-RADIANS/0/1Hour/232.5.133.1.2/",
+             "/MR Sac.-Clear Cr. to Sac R./KRDD-Wind Direction/Dir-Wind//1Hour/235.40.133.1.2/"],
             ["/MR Sac.-Lewiston Res./TCAC1-Wind Speed/Speed-Wind//1Hour/232.5.133.1.1/",
              "/MR Sac.-Clear Cr. to Sac R./KRDD-Wind Speed/Speed-Wind//1Hour/235.40.133.1.1/"],
             ["/MR Sac.-Trinity River/TCAC1 - Calc Data-Cloud Cover/%-Cloud Cover//1Day/236.9.129.1.1/",
@@ -188,7 +228,6 @@ def splice_lewiston_met_data(currentAlternative, rtw, met_dss_file, output_dss_f
              "/MR Sac.-Clear Cr. to Sac R./RRAC1-Cloud Cover/%-Cloud Cover-FRAC//1Hour/235.41.129.1.1/"]
              ]
 
-    months = [1,2,3] #these are the months we are replacing with pair #2
     replace_data(currentAlternative, rtw, pairs, met_dss_file, output_dss_file, months, standard_interval='1HOUR')
    
 
@@ -261,7 +300,7 @@ def preprocess_W2_5Res(currentAlternative, computeOptions):
     met_dss_file = os.path.join(shared_dir,'DMS_SacTrnMet.dss')
     fix_DMS_types_units(met_dss_file)
 
-    splice_lewiston_met_data(currentAlternative, rtw, met_dss_file, output_dss_file)
+    splice_lewiston_met_data(currentAlternative, rtw, met_dss_file, output_dss_file, months=[1,2,3,12])
     compute_5Res_outflows(currentAlternative, rtw, hydro_dss, output_dss_file)
 
 
@@ -287,7 +326,7 @@ def preprocess_ResSim_5Res(currentAlternative, computeOptions):
     #DSS_Tools.strip_templateID_and_rename_records(hydro_dss,currentAlternative)
     #DSS_Tools.strip_templateID_and_rename_records(met_dss_file,currentAlternative)
 
-    splice_lewiston_met_data(currentAlternative, rtw, met_dss_file, output_dss_file)
+    splice_lewiston_met_data(currentAlternative, rtw, met_dss_file, output_dss_file,months=[1,2,3])
     compute_5Res_outflows(currentAlternative, rtw, hydro_dss, output_dss_file)
     compute_plotting_records(currentAlternative, rtw, hydro_dss, output_dss_file)
 
@@ -295,7 +334,14 @@ def preprocess_ResSim_5Res(currentAlternative, computeOptions):
     currentAlternative.addComputeMessage('lapse infile: '+met_dss_file)
     currentAlternative.addComputeMessage('lapse outfile: '+output_dss_file)
     airtemp_lapse(met_dss_file, "/MR SAC.-CLEAR CR. TO SAC R./KRDD-AIR TEMPERATURE/TEMP-AIR//1HOUR/235.40.53.1.1/",
-                  0.7, output_dss_file, "Shasta_Lapse")
+                  -0.7, output_dss_file, "Shasta_Lapse")
+
+    relhum_from_at_dp(met_dss_file,
+	                  "/MR Sac.-Clear Cr. to Sac R./KRDD-Air temperature/Temp-Air//1Hour/235.40.53.1.1/",
+	                  "/MR Sac.-Clear Cr. to Sac R./KRDD-Dew Point/Temp-DewPoint//1Hour/235.40.51.1.1/")
+    relhum_from_at_dp(met_dss_file,
+	                  "/MR Sac.-Lewiston Res./TCAC1 - Calc Data-Air temperature/Temp-Air//1Hour/232.6.53.1.1/",
+	                  "/MR Sac.-Lewiston Res./TCAC1 - Calc Data-Dew Point/Temp-DewPoint//1Hour/232.6.51.1.1/")
 
     return True
 
