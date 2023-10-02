@@ -21,6 +21,8 @@ import DSS_Tools
 reload(DSS_Tools)
 import equilibrium_temp
 reload(equilibrium_temp)
+import DMS_preprocess
+reload(DMS_preprocess)
 
 from com.rma.io import DssFileManagerImpl
 from java.util import TimeZone
@@ -161,7 +163,7 @@ def forecast_data_preprocess_ResSim_5Res(currentAlternative, computeOptions):
 
     output_dss_file = os.path.join(shared_dir,'forecast_SacTrn_ResSim_Pre-Process.dss')
     forecast_dss = os.path.join(shared_dir,'WTMP_SacTrn_Forecast.dss')
-    DSS_Tools.fix_DMS_types_units(forecast_dss)
+    DMS_preprocess.fix_DMS_types_units(forecast_dss)
     
     # calculate meteorological airtemp lapse for the elevation @ Shasta Lake
     currentAlternative.addComputeMessage('lapse infile: '+forecast_dss)
@@ -177,8 +179,8 @@ def forecast_data_preprocess_ResSim_5Res(currentAlternative, computeOptions):
              "/MR Sac.-Clear Cr. to Sac R./KRDD/Temp-DewPoint//1Hour/SACTRN_BC_SCRIPT/"],
             ["/MR SAC.-LEWISTON RES./TCAC1/IRRAD-SOLAR//1HOUR/SACTRN_BC_SCRIPT/",
              "/MR SAC.-CLEAR CR. TO SAC R./RRAC1/IRRAD-SOLAR//1HOUR/SACTRN_BC_SCRIPT/"],
-            ["/MR Sac.-Lewiston Res./TCAC1/Dir-Wind/0/1Hour/SACTRN_BC_SCRIPT/",
-             "/MR Sac.-Clear Cr. to Sac R./KRDD/Dir-Wind//1Hour/SACTRN_BC_SCRIPT/"],
+            ["/MR Sac.-Lewiston Res./TCAC1/Dir-Wind-radians/0/1Hour/SACTRN_BC_SCRIPT/",
+             "/MR Sac.-Clear Cr. to Sac R./KRDD/Dir-Wind-radians//1Hour/SACTRN_BC_SCRIPT/"],
             ["/MR Sac.-Lewiston Res./TCAC1/Speed-Wind//1Hour/SACTRN_BC_SCRIPT/",
              "/MR Sac.-Clear Cr. to Sac R./KRDD/Speed-Wind//1Hour/SACTRN_BC_SCRIPT/"],
             ["/MR Sac.-Trinity River/TCAC1/%-Cloud Cover//1Day/SACTRN_BC_SCRIPT/",
@@ -217,9 +219,9 @@ def fix_DMS_parts(currentAlternative, computeOptions):
     shared_dir = os.path.join(project_dir, 'shared')
 
     hydro_dss = os.path.join(shared_dir, 'DMS_SacTrnHydroTS.dss')
-    DSS_Tools.fix_DMS_types_units(hydro_dss)
+    DMS_preprocess.fix_DMS_types_units(hydro_dss)
     met_dss_file = os.path.join(shared_dir,'DMS_SacTrnMet.dss')
-    DSS_Tools.fix_DMS_types_units(met_dss_file)
+    DMS_preprocess.fix_DMS_types_units(met_dss_file)
 
     DSS_Tools.strip_templateID_and_rename_records(hydro_dss,currentAlternative)
     DSS_Tools.strip_templateID_and_rename_records(met_dss_file,currentAlternative)
