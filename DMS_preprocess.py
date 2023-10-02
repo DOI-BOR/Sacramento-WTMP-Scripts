@@ -27,7 +27,7 @@ reload(Acc_Dep_ResSim_SacTrn)
 import DSS_Tools
 reload(DSS_Tools)
 
-units_need_fixing = ['tenths','deg',] #'radians',]
+units_need_fixing = ['tenths','m/s','deg',] #'radians',]
 
 def fix_DMS_types_units(dss_file):
     '''This method was implemented to change data types to PER-AVER that are not coming from the DMS that way'''
@@ -71,6 +71,16 @@ def fix_DMS_types_units(dss_file):
                 for i in range(len(tsc.values)) :
                     tsc.values[i] = tsc.values[i] / 360.0 * (2*3.141592653589793)                
                 dss.write(tsc)
+            if tsm.getUnits() == 'm/s':
+                # make a copy divied by kph conversion as a hack to get W2 linking the wind speed correctly 
+                tsc = tsm.getData()
+                rec_parts = tsc.fullName.split('/')
+                if not "w2link" in rec_parts[3].lower():
+                    rec_parts[3] += '-W2link'
+                    tsc.fullName = '/'.join(rec_parts)
+                    for i in range(len(tsc.values)) :
+                        tsc.values[i] = tsc.values[i] / 3.6
+                    dss.write(tsc)
     dss.close()
 
 def airtemp_lapse(dss_file,dss_rec,lapse_in_C,dss_outfile,f_part):
@@ -220,8 +230,8 @@ def splice_lewiston_met_data(currentAlternative, rtw, met_dss_file, output_dss_f
              "/MR SAC.-CLEAR CR. TO SAC R./RRAC1-SOLAR RADIATION/IRRAD-SOLAR//1HOUR/235.41.135.1.1/"],
             ["/MR Sac.-Lewiston Res./TCAC1-Wind Direction/Dir-Wind-RADIANS/0/1Hour/232.5.133.1.2/",
              "/MR Sac.-Clear Cr. to Sac R./KRDD-Wind Direction/Dir-Wind//1Hour/235.40.133.1.2/"],
-            ["/MR Sac.-Lewiston Res./TCAC1-Wind Speed/Speed-Wind//1Hour/232.5.133.1.1/",
-             "/MR Sac.-Clear Cr. to Sac R./KRDD-Wind Speed/Speed-Wind//1Hour/235.40.133.1.1/"],
+            ["/MR Sac.-Lewiston Res./TCAC1-Wind Speed/Speed-Wind-W2link//1Hour/232.5.133.1.1/",
+             "/MR Sac.-Clear Cr. to Sac R./KRDD-Wind Speed/Speed-Wind-W2link//1Hour/235.40.133.1.1/"],
             ["/MR Sac.-Trinity River/TCAC1 - Calc Data-Cloud Cover/%-Cloud Cover//1Day/236.9.129.1.1/",
              "/MR Sac.-Clear Cr. to Sac R./RRAC1-Cloud Cover/%-Cloud Cover//1Hour/235.41.129.1.1/"],
             ["/MR Sac.-Trinity River/TCAC1 - Calc Data-Cloud Cover/%-Cloud Cover-FRAC//1Day/236.9.129.1.1/",
