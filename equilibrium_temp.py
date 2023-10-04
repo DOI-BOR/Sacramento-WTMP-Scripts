@@ -26,6 +26,9 @@ def bisection_solve(fTe_min, a, b, H1, uw, Ta_in, td, sat_vp_ta, tol=1e-2, max_i
     iter_count = 0
     while (b - a) / 2.0 > tol:
         c = (a + b) / 2.0
+        # protect against divide-by-zero during iteration
+        if (c-td) == 0.0:
+            c += tol
         fc = fTe_min(c, H1, uw, Ta_in, td, sat_vp_ta)
 
         if fc == 0 or (b - a) / 2.0 < tol:
