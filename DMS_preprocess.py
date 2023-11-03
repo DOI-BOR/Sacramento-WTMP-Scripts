@@ -331,7 +331,22 @@ def preprocess_ResSim_5Res(currentAlternative, computeOptions):
     fix_DMS_types_units(hydro_dss)
     met_dss_file = os.path.join(shared_dir,'DMS_SacTrnMet.dss')
     fix_DMS_types_units(met_dss_file)
-    
+
+    DSS_Tools.create_constant_dss_rec(currentAlternative, rtw, output_dss_file, constant=0.0, what='flow', 
+                        dss_type='PER-AVER', period='1DAY',cpart='ZEROS',fpart='ZEROS')
+    DSS_Tools.create_constant_dss_rec(currentAlternative, rtw, output_dss_file, constant=0.0, what='flow', 
+                        dss_type='PER-AVER', period='1HOUR',cpart='ZEROS',fpart='ZEROS')
+    DSS_Tools.create_constant_dss_rec(currentAlternative, rtw, output_dss_file, constant=0.0, what='temp-water', 
+                        dss_type='PER-AVER', period='1DAY',cpart='ZEROS',fpart='ZEROS')
+    DSS_Tools.create_constant_dss_rec(currentAlternative, rtw, output_dss_file, constant=0.0, what='temp-water', 
+                        dss_type='PER-AVER', period='1HOUR',cpart='ZEROS',fpart='ZEROS')
+    DSS_Tools.create_constant_dss_rec(currentAlternative, rtw, output_dss_file, constant=0, what='gate', 
+                        dss_type='INST-VAL', period='1HOUR',cpart='ZEROS',fpart='ZEROS')
+    DSS_Tools.create_constant_dss_rec(currentAlternative, rtw, output_dss_file, constant=1, what='gate', 
+                        dss_type='INST-VAL', period='1HOUR',cpart='ONES',fpart='ONES')
+
+
+                        
     # if template IDs exist still, remove them
     #DSS_Tools.strip_templateID_and_rename_records(hydro_dss,currentAlternative)
     #DSS_Tools.strip_templateID_and_rename_records(met_dss_file,currentAlternative)

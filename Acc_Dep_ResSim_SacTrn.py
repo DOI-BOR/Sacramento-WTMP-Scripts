@@ -54,7 +54,7 @@ def computeAlternative(currentAlternative, computeOptions):
                        ]
 
     stage_record = '::'.join([fallback_dss_file,'/USBR/SHASTA/ELEVATION//1HOUR/USBR_BLESSED/'])
-    evap_record = '::'.join([fallback_dss_file,'//ZEROS/FLOW/*/1HOUR//'])
+    evap_record = '::'.join([output_dss_file,'//ZEROS/FLOW//1HOUR/ZEROS/'])
 
     elev_stor_area = cbfj.read_elev_storage_area_file(os.path.join(shared_dir, 'AMR_scratch_shasta.csv'), 'Shasta') #TODO: check this    
 
@@ -87,15 +87,15 @@ def computeAlternative(currentAlternative, computeOptions):
                       '::'.join([DMS_hydro_dss_file,'/MR Sac.-Shasta Lake/SHA-Spill Release/Flow//1Hour/230.11.125.4.1/']),
                       '/USBR/SHASTA_RRU/FLOW//1HOUR/SUPP/',
                       '/USBR/SHASTA_RRM/FLOW//1HOUR/SUPP/',
-                      '/USBR/SHASTA_RRL/FLOW//1HOUR/SUPP/',
-                      '/USBR-LINEARINTERP-CAPPED/WHI_GENERATION_RELEASE/FLOW//1HOUR/GRAB2PROCESSED/',
+                      '/USBR/SHASTA_RRL/FLOW//1HOUR/SUPP/',                      
+                      '::'.join([DMS_hydro_dss_file,'/MR SAC.-WHISKEYTOWN LAKE/WHI-GENERATION RELEASE/FLOW//1HOUR/233.14.125.1.1/']),
                       '/SPC DEBRIS DAM FLOW CALCULATION/SPRING_CREEK_SPC2017SHIFT-WHI_GEN_RELEASE-NONEG/FLOW//1HOUR/USBR_DERIVED/'
                       ]
 
     outflow_records = ['/USBR/KESWICK_QOUT_SUM/FLOW//1HOUR/USBR_DERIVED/']
 
     stage_record = '/USBR/KESWICK/ELEVATION//1HOUR/USBR_BLESSED/'
-    evap_record = '//ZEROS/FLOW/*/1HOUR//'
+    evap_record = '::'.join([output_dss_file,'//ZEROS/FLOW//1HOUR/ZEROS/'])
 
     elev_stor_area = cbfj.read_elev_storage_area_file(os.path.join(shared_dir, 'AMR_scratch_keswick.csv'), 'Keswick') #TODO: check this
 
@@ -137,7 +137,7 @@ def computeAlternative(currentAlternative, computeOptions):
                        ]
 
     stage_record = '::'.join([fallback_dss_file,'/USBR_CLEANED_FULLLINEARINTERP/LEW_ELEVATION_PROCESSED/ELEV//1HOUR/GRAB2/'])
-    evap_record = '::'.join([fallback_dss_file,'//ZEROS/FLOW/*/1HOUR//'])
+    evap_record = '::'.join([output_dss_file,'//ZEROS/FLOW//1HOUR/ZEROS/'])
 
     elev_stor_area = cbfj.read_elev_storage_area_file(os.path.join(shared_dir, 'AMR_scratch_lewiston.csv'), 'lewiston') #TODO: check this
 
@@ -183,7 +183,7 @@ def computeAlternative(currentAlternative, computeOptions):
                       '/MR Sac.-Trinity Lake/TRN-Spill Release/Flow//1Hour/231.5.125.3.1/']
 
     stage_record = '::'.join([fallback_dss_file,'/USBR_RECLEANED_FULLLINEARINTERP/TRN_ELEVATION/ELEV//1HOUR/GRAB2/'])
-    evap_record = '::'.join([fallback_dss_file,'//ZEROS/FLOW/*/1HOUR//'])
+    evap_record = '::'.join([output_dss_file,'//ZEROS/FLOW//1HOUR/ZEROS/'])
 
     elev_stor_area = cbfj.read_elev_storage_area_file(os.path.join(shared_dir, 'AMR_scratch_trinity.csv'), 'trinity') #TODO: check this
 
@@ -211,18 +211,19 @@ def computeAlternative(currentAlternative, computeOptions):
     # Flows are assumed to be period averaged
     # Evap assumed to be period accumulated length (e.g., ft)
     # Stage assumed to be instantaneous values
-
-    inflow_records = ['/USBR/JCR_GENERATION_RELEASE/FLOW//1HOUR/GRAB2-CAPPED-INTERPFILL/', #ignore?
-                      '/USBR-LINEARINTERP/CLEAR CR ABOVE JCR INFLOW/FLOW//1HOUR/USBR_BLESSED/'
+    
+    sdf.resample_dss_ts(DMS_hydro_dss_file,'/MR SAC.-WHISKEYTOWN LAKE/CLEAR CREEK AB WHISKEYTOWN LAKE-FLOW/FLOW//1DAY/233.131.125.1.1/',rtw,output_dss_file,'1HOUR')
+    inflow_records = ['/MR Sac.-Whiskeytown Lake/JCR-Generation Release/Flow//1Hour/233.13.125.1.1/', 
+                      '::'.join([output_dss_file,'/MR SAC.-WHISKEYTOWN LAKE/CLEAR CREEK AB WHISKEYTOWN LAKE-FLOW/FLOW//1Hour/233.131.125.1.1/'])
                       ]
 
-    outflow_records = ['//WHI_OUTLET_RELEASE_MANUFACTURED/FLOW//1HOUR/OUTLET_OR_IGO-10/', #Whiskey town Lake - Upper Outlet
-                       '/USBR-LINEARINTERP-CAPPED/WHI_GENERATION_RELEASE/FLOW//1HOUR/GRAB2PROCESSED/',#Whiskeytown Lake - Spring CreekTunnel diversion
-                       '/USBR/WHI_SPILL_RELEASE/FLOW//1HOUR/GRAB2-INTERPFILL/', #spill release
+    outflow_records = ['/MR SAC.-WHISKEYTOWN LAKE/WHI-OUTLET RELEASE/FLOW//1HOUR/233.14.125.2.1/', #Whiskeytown Lake - Upper Dam Outlet
+                       '/MR SAC.-WHISKEYTOWN LAKE/WHI-GENERATION RELEASE/FLOW//1HOUR/233.14.125.1.1/',#Whiskeytown Lake - Spring CreekTunnel diversion
+                       '/MR SAC.-WHISKEYTOWN LAKE/WHI-SPILL RELEASE/FLOW//1HOUR/233.14.125.5.1/', #spill release
                        ]
 
-    stage_record = '/USBR+23HrShift/WHI_ELEVATION/ELEV//1HOUR/GRAB2-MANUAL-FILTER-INTERPFILL/'
-    evap_record = '//ZEROS/FLOW/*/1HOUR//'
+    stage_record = '::'.join([fallback_dss_file,'/USBR+23HrShift/WHI_ELEVATION/ELEV//1HOUR/GRAB2-MANUAL-FILTER-INTERPFILL/'])
+    evap_record = '::'.join([output_dss_file,'//ZEROS/FLOW//1HOUR/ZEROS/'])
 
     elev_stor_area = cbfj.read_elev_storage_area_file(os.path.join(shared_dir, 'AMR_scratch_whiskeytown.csv'), 'Whiskeytown') #TODO: check this
 
@@ -239,7 +240,7 @@ def computeAlternative(currentAlternative, computeOptions):
             output_dss_record_name = "/WHISKEYTOWN RESERVOIR/BALANCE FLOW/FLOW//1HOUR/DERIVED-CONIC INTERP NO EVAP/"
 
     cbfj.create_balance_flows(currentAlternative, rtw, 'whiskeytown', inflow_records, outflow_records, stage_record, evap_record,
-                                elev_stor_area, fallback_dss_file, output_dss_record_name, output_dss_file, shared_dir,
+                                elev_stor_area, DMS_hydro_dss_file, output_dss_record_name, output_dss_file, shared_dir,
                                 evap_dss_record_name=evap_dss_record_name, storage_dss_record_name=storage_dss_record_name,
                                 balance_period_str=balance_period_str, use_conic=use_conic, write_evap=write_evap, write_storage=write_storage,
                                 alt_period=1440, alt_period_string='1Day')

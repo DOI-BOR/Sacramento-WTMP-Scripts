@@ -62,6 +62,7 @@ def computeAlternative(currentAlternative, computeOptions):
     hecstarttimes = base_TS.times
     all_values = base_TS.values
     units = base_TS.units
+    dsstype = base_TS.type
 
     for other_loc in locations[1:2]:
         new_values = []
@@ -89,6 +90,7 @@ def computeAlternative(currentAlternative, computeOptions):
     tsc.values = all_values
     tsc.startTime = hecstarttimes[0]
     tsc.units = units
+    tsc.type = dsstype
     tsc.endTime = hecstarttimes[-1]
     tsc.numberValues = len(all_values)
     tsc.startHecTime = rtw.getStartTime()
@@ -138,7 +140,7 @@ def computeAlternative(currentAlternative, computeOptions):
     currentAlternative.addComputeMessage('Looking from {0} to {1}'.format(starttime_str, endtime_str))
     dssFm = HecDss.open(dssFile)
     TS = dssFm.read(tspath, starttime_str, endtime_str, False)
-    TS = TS.getData()
+    TS = TS.getData()    
     hecstarttimes = TS.times
 
     heat_amount_c = 0.32
@@ -151,7 +153,8 @@ def computeAlternative(currentAlternative, computeOptions):
     tsc.fullName = outputpath
     tsc.values = new_values
     tsc.startTime = hecstarttimes[0]
-    tsc.units = 'c'
+    tsc.units = TS.units
+    tsc.type = TS.type
     tsc.endTime = hecstarttimes[-1]
     tsc.numberValues = len(new_values)
     tsc.startHecTime = rtw.getStartTime()

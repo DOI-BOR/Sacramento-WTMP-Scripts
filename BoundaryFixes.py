@@ -35,6 +35,7 @@ def replaceValuesOverThresh(currentAlt, dssFile, timewindow, primary_data_dsspat
     ExistingTS_values = ExistingTS.values
     ExistingTS_times = ExistingTS.times
     ExistingTS_units = ExistingTS.units
+    ExistingTS_type = ExistingTS.type
 
     for i, primary_val in enumerate(PrimaryTS_values):
         if primary_val > threshold:
@@ -55,6 +56,7 @@ def replaceValuesOverThresh(currentAlt, dssFile, timewindow, primary_data_dsspat
     tsc.values = ExistingTS_values
     tsc.startTime = ExistingTS_times[0]
     tsc.units = ExistingTS_units
+    tsc.type = ExistingTS_type
     tsc.endTime = ExistingTS_times[-1]
     tsc.numberValues = len(ExistingTS_values)
     tsc.startHecTime = timewindow.getStartTime()
@@ -75,6 +77,7 @@ def replaceNaNValues(currentAlt, dssFile, timewindow, existing_dsspath, fill_dss
     ExistingTS_values = ExistingTS.values
     ExistingTS_times = ExistingTS.times
     ExistingTS_units = ExistingTS.units
+    ExistingTS_type = ExistingTS.type
 
     FillTS = dssFm.read(fill_dsspath, starttime_str, endtime_str, False)
     FillTS = FillTS.getData()
@@ -98,6 +101,7 @@ def replaceNaNValues(currentAlt, dssFile, timewindow, existing_dsspath, fill_dss
     tsc.values = ExistingTS_values
     tsc.startTime = ExistingTS_times[0]
     tsc.units = ExistingTS_units
+    tsc.type = ExistingTS_type    
     tsc.endTime = ExistingTS_times[-1]
     tsc.numberValues = len(ExistingTS_values)
     tsc.startHecTime = timewindow.getStartTime()
