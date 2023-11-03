@@ -12,7 +12,7 @@ from com.rma.model import Project
 import os,shutil,copy
 from java.util import Vector, Date
 
-from datetime import datetime
+import datetime
 from hec.heclib.util import HecTime  # Replace with actual import
 
 
@@ -50,10 +50,10 @@ def hectime_to_datetime(tsc):
     for j in range(tsc.numberValues):
         # Assuming hectime can be converted to Java Date or has method to get the equivalent
         java_date = tsc.getHecTime(j).getJavaDate(0)  
-	    
+        
         # Convert Java Date to Python datetime
         timestamp = (java_date.getTime() / 1000)
-        dtt.append(datetime.fromtimestamp(timestamp))
+        dtt.append(datetime.datetime.fromtimestamp(timestamp))
 
     return dtt
 
@@ -100,7 +100,7 @@ def strip_templateID_and_rename_records(dssFilePath,currentAlt):
     rec_names = dss.getPathnameList()
     new_rec_names = Vector()
     #currentAlt.addComputeMessage(type(rec_names).__name__)
-    for i,r in enumerate(rec_names):		
+    for i,r in enumerate(rec_names):        
         #currentAlt.addComputeMessage(type(r).__name__)        
         parts = r.split('/')
         if not '-' in parts[-2]:
@@ -129,6 +129,7 @@ def add_DSS_Data(currentAlt, dssFile, timewindow, input_data, output_path):
         values = ts.values
         times = ts.times
         units = ts.units
+        dsstype = ts.type
         if len(output_data) == 0:
             output_data = values
         else:
@@ -141,6 +142,7 @@ def add_DSS_Data(currentAlt, dssFile, timewindow, input_data, output_path):
     tsc.values = output_data
     tsc.startTime = times[0]
     tsc.units = units
+    tsc.type = dsstype
     tsc.endTime = times[-1]
     tsc.numberValues = len(output_data)
     tsc.startHecTime = timewindow.getStartTime()
@@ -268,8 +270,8 @@ def add_flows(currentAlt, timewindow, inflow_records, dss_file, output_dss_recor
 
 def add_or_subtract_flows(currentAlt, timewindow, inflow_records, dss_file, operation,
                        output_dss_record_name, output_dss_file):
-	# operation: list where True = add, False = subtract, e.g. [True,False,True] to substract the 2nd
-	# record from the sun of the first and third records
+    # operation: list where True = add, False = subtract, e.g. [True,False,True] to substract the 2nd
+    # record from the sun of the first and third records
      
     #cfs_2_acreft = balance_period * 3600. / 43559.9
     #acreft_2_cfs = 1. / cfs_2_acreft
@@ -287,7 +289,7 @@ def add_or_subtract_flows(currentAlt, timewindow, inflow_records, dss_file, oper
 
     # Read inflows
     print('Reading inflows')
-	
+    
     for j, inflow_record in enumerate(inflow_records): #for each of the dss paths in inflow_records
         pathname = inflow_record
         currentAlt.addComputeMessage('reading' + str(pathname))
@@ -332,13 +334,13 @@ def add_or_subtract_flows(currentAlt, timewindow, inflow_records, dss_file, oper
             inflows = values
             times = hectimes #TODO: check how this handles missing values
         else:
-        	if operation[j]:
-	            for vi, v in enumerate(values):
-	                inflows[vi] += v
-	        else:
-	            for vi, v in enumerate(values):
-	                inflows[vi] -= v
-	                
+            if operation[j]:
+                for vi, v in enumerate(values):
+                    inflows[vi] += v
+            else:
+                for vi, v in enumerate(values):
+                    inflows[vi] -= v
+                    
     # Output record
     tsc = TimeSeriesContainer()
     tsc.times = times
@@ -357,3 +359,84 @@ def add_or_subtract_flows(currentAlt, timewindow, inflow_records, dss_file, oper
     dssFm.close()
     dssFm_out.close()
 
+
+def hec_str_time_to_dt(hec_str_time):
+    '''Convert HEC date time format to python datetime object'''
+
+    dt_format = '%d%b%Y %H%M'
+    add_day = False
+    if hec_str_time.endswith('2400'):
+        my_hec_str_time = hec_str_time[:-4] + '0000'
+        add_day = True
+    else:
+        my_hec_str_time = hec_str_time
+
+    dt = datetime.datetime.strptime(my_hec_str_time,dt_format)
+    if add_day:
+        dt = dt + datetime.timedelta(days=1)
+    return dt
+
+
+def create_constant_dss_rec(currentAlt, timewindow, output_dss_file, constant=0.0, what='flow', 
+                        dss_type='PER-AVER', period='1HOUR',cpart='ZEROS', fpart='ZEROS'):
+    '''Create and write a dss record with a constant in it for the given time windows.
+       what={'flow','temp-water'}
+       period={'1HOUR','1DAY'}
+    '''
+
+    if what.lower()=='flow':
+        units = 'cfs'
+        parameter = 'flow'
+    elif what.lower()=='temp-water':
+        units = 'C'
+        parameter = 'temp-water'
+    elif what.lower()=='gate':
+        units = 'n/a'
+        parameter = 'gate'
+    else:
+        currentAlt.addComputeMessage('create_zero_dss_rec: what not known: %s'%what)
+        return False
+
+    if period.lower()=='1hour':
+        pass
+    elif period.lower()=='1day':
+        pass
+    else:
+        currentAlt.addComputeMessage('create_zero_dss_rec: period not known: %s'%period)
+        return False
+
+    dt_format = '%d%b%Y %H%M'
+    
+    starttime_str = timewindow.getStartTimeString()
+    endtime_str = timewindow.getEndTimeString()
+    #starttime_hectime = HecTime(starttime_str).value()
+    #endtime_hectime = HecTime(endtime_str).value()
+
+    # pad 1 day on records, in case these are used for lookbacks, or balance flow calcs, etc.
+    starttime_dt = hec_str_time_to_dt(starttime_str) - datetime.timedelta(days=1)    
+    endtime_dt = hec_str_time_to_dt(endtime_str) + datetime.timedelta(days=1)
+    starttime_str_pad = starttime_dt.strftime(dt_format)
+    endtime_str_pad = endtime_dt.strftime(dt_format)    
+ 
+    currentAlt.addComputeMessage('Looking from {0} to {1}'.format(starttime_str, endtime_str))
+
+    ########################
+    # Zero-Flow Time Series
+    ########################
+
+    tsmath_zero_flow_day = tsmath.generateRegularIntervalTimeSeries(
+        starttime_str_pad,
+        endtime_str_pad,
+        period, "0M", constant)
+    tsmath_zero_flow_day.setUnits(units)
+    tsmath_zero_flow_day.setType(dss_type)
+    tsmath_zero_flow_day.setTimeInterval(period)
+    tsmath_zero_flow_day.setLocation(cpart)
+    tsmath_zero_flow_day.setParameterPart(parameter)
+    tsmath_zero_flow_day.setVersion(fpart)
+
+    dssFm = HecDss.open(output_dss_file)
+    dssFm.write(tsmath_zero_flow_day)
+    dssFm.close()
+
+    return True

@@ -42,22 +42,27 @@ def computeAlternative(currentAlternative, computeOptions):
     
     # Flow-weight average Lewiston outflow temps for linking
     # ------------------------------------------------------------------------------------
-    
-    outputFpart = 'PostProcessed'
 
     # first outpath is flow-weighted dam temperature
     outputlocations = currentAlternative.getOutputDataLocations()
     outputpath = currentAlternative.createOutputTimeSeries(outputlocations[0])
     #if len(outputlocations) > 1:
     #    currentAlternative.addComputeMessage("Found more than 1 output datapath locations. Using the first, {0}".format(outputlocations[0]))
+    currentAlternative.addComputeMessage("Original output location 0 {0}".format(outputlocations[0]))
+    currentAlternative.addComputeMessage("Original tsc fullname 0 {0}".format(outputpath.fullName))
     tspath =str(outputpath)
+    
+    currentAlternative.addComputeMessage("Original outpath 0 {0}".format(outputpath))
     tspath = tspath.split('/')
     fpart = tspath[6]
 #    new_fpart = fpart.lower().split(':scripting-')[0] #fpart will have scripting in it, but we want w2 version
 #    new_fpart += ':cequalw2-' #replace scripting with W2
 #    new_fpart += '-'.join(computeOptions.getSimulationName().split('-')[:-1]) #sim name will have the sim group, so snip that
-    tspath[6] = outputFpart
+    if '|' in fpart:
+        # remove everything before | including |
+        tspath[6] = fpart[fpart.find('|')+1:]
     outputpath = '/'.join(tspath)
+    #outputpath = str(outputpath)
     currentAlternative.addComputeMessage("Outputting to {0}".format(outputpath))
 
     cfs_limit = 1.0 #float
@@ -128,7 +133,8 @@ def computeAlternative(currentAlternative, computeOptions):
     tsc.fullName = outputpath
     tsc.values = new_values
     tsc.startTime = hecstarttimes[0]
-    tsc.units = 'c'
+    tsc.units = TS.units
+    tsc.type = TS.type
     tsc.endTime = hecstarttimes[-1]
     tsc.numberValues = len(new_values)
     tsc.startHecTime = rtw.getStartTime()

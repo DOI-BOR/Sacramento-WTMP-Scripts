@@ -68,6 +68,7 @@ def FWA(currentAlt, dssFile, timewindow, DSSPaths_list, outputname, cfs_limit=No
         TempTS = dssFm.read(temp_dss_path, starttime_str, endtime_str, False)
         TempTS = TempTS.getData()
         tempunits = TempTS.units
+        temptype = TempTS.type
         dss_data[dspi]['temp'] = TempTS.values
 
 #    print(readabledates)
@@ -119,6 +120,7 @@ def FWA(currentAlt, dssFile, timewindow, DSSPaths_list, outputname, cfs_limit=No
     tsc.values = FW_Avg_vals
     tsc.startTime = hecstarttimes[0]
     tsc.units = tempunits
+    tsc.type = temptype
     tsc.endTime = hecstarttimes[-1]
     tsc.numberValues = len(FW_Avg_vals)
     tsc.startHecTime = timewindow.getStartTime()

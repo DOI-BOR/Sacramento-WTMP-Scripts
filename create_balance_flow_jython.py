@@ -420,6 +420,7 @@ def create_balance_flows(currentAlt, timewindow, res_name, inflow_records, outfl
         tsc.values = flow_evap
         tsc.startTime = times[1]
         tsc.units = 'CFS'
+        tsc.type = 'PER-AVER'
         tsc.endTime = times[-1]
         tsc.numberValues = len(flow_resid)
         tsc.startHecTime = timewindow.getStartTime()
@@ -433,6 +434,7 @@ def create_balance_flows(currentAlt, timewindow, res_name, inflow_records, outfl
         tsc.values = storage_record
         tsc.startTime = times[1]
         tsc.units = "AC-FT"
+        tsc.type = 'INST-VAL'  # is this right?
         tsc.endTime = times[-1]
         tsc.numberValues = len(flow_resid)
         tsc.startHecTime = timewindow.getStartTime()
