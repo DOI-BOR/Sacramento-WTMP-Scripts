@@ -53,7 +53,7 @@ def computeAlternative(currentAlternative, computeOptions):
                        '/MR Sac.-Shasta Lake/SHA-Generation Release/Flow//1Hour/230.11.125.3.1/'
                        ]
 
-    stage_record = '::'.join([fallback_dss_file,'/USBR/SHASTA/ELEVATION//1HOUR/USBR_BLESSED/'])
+    stage_record = '/MR Sac.-Shasta Lake/SHA-Elevation/Elev//1Hour/230.11.145.2.1/'
     evap_record = '::'.join([output_dss_file,'//ZEROS/FLOW//1HOUR/ZEROS/'])
 
     elev_stor_area = cbfj.read_elev_storage_area_file(os.path.join(shared_dir, 'AMR_scratch_shasta.csv'), 'Shasta') #TODO: check this    
@@ -136,7 +136,7 @@ def computeAlternative(currentAlternative, computeOptions):
                        '/MR Sac.-Lewiston Res./LEW-Spill Release Hrly/Flow//1Hour/232.12.125.5.1/', #Lewiston Res. Dam at Trinity River - Powerhouse
                        ]
 
-    stage_record = '::'.join([fallback_dss_file,'/USBR_CLEANED_FULLLINEARINTERP/LEW_ELEVATION_PROCESSED/ELEV//1HOUR/GRAB2/'])
+    stage_record = '/MR Sac.-Lewiston Res./LEW-Reservoir Elevation Hrly/Elev//1Hour/232.12.145.1.1/'
     evap_record = '::'.join([output_dss_file,'//ZEROS/FLOW//1HOUR/ZEROS/'])
 
     elev_stor_area = cbfj.read_elev_storage_area_file(os.path.join(shared_dir, 'AMR_scratch_lewiston.csv'), 'lewiston') #TODO: check this
@@ -182,7 +182,7 @@ def computeAlternative(currentAlternative, computeOptions):
                       '/MR Sac.-Trinity Lake/TRN-Outlet Release G3/Flow//1Hour/231.5.125.9.1/',
                       '/MR Sac.-Trinity Lake/TRN-Spill Release/Flow//1Hour/231.5.125.3.1/']
 
-    stage_record = '::'.join([fallback_dss_file,'/USBR_RECLEANED_FULLLINEARINTERP/TRN_ELEVATION/ELEV//1HOUR/GRAB2/'])
+    stage_record = '/MR Sac.-Trinity Lake/TRN-Reservoir Elevation/Elev//1Hour/231.5.145.1.1/'
     evap_record = '::'.join([output_dss_file,'//ZEROS/FLOW//1HOUR/ZEROS/'])
 
     elev_stor_area = cbfj.read_elev_storage_area_file(os.path.join(shared_dir, 'AMR_scratch_trinity.csv'), 'trinity') #TODO: check this
@@ -222,7 +222,7 @@ def computeAlternative(currentAlternative, computeOptions):
                        '/MR SAC.-WHISKEYTOWN LAKE/WHI-SPILL RELEASE/FLOW//1HOUR/233.14.125.5.1/', #spill release
                        ]
 
-    stage_record = '::'.join([fallback_dss_file,'/USBR+23HrShift/WHI_ELEVATION/ELEV//1HOUR/GRAB2-MANUAL-FILTER-INTERPFILL/'])
+    stage_record = '/MR Sac.-Whiskeytown Lake/WHI-Reservoir Elevation/Elev//1Hour/233.14.145.1.1/'
     evap_record = '::'.join([output_dss_file,'//ZEROS/FLOW//1HOUR/ZEROS/'])
 
     elev_stor_area = cbfj.read_elev_storage_area_file(os.path.join(shared_dir, 'AMR_scratch_whiskeytown.csv'), 'Whiskeytown') #TODO: check this

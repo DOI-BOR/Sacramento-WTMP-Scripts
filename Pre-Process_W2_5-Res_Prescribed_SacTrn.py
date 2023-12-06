@@ -76,13 +76,13 @@ def computeAlternative(currentAlternative, computeOptions):
             copy_tree(annual_config_dir,model_dir)
             currentAlternative.addComputeMessage('Copied W2 inputs file for '+startyear_str+' to '+W2_model+' model alternative folder')
             
-            # now, W2 model alternative directory is confiured for startyear, ready for the W2 plugin to
-            # work it's magic on the W2_con file and execture simulation    
+            # now, W2 model alternative directory is configured for startyear, ready for the W2 plugin to
+            # work it's magic on the W2_con file and execute simulation   
 
 	DMS_preprocess.preprocess_W2_5Res(currentAlternative, computeOptions)
 
 	# remove me most of the time
-	#backdate_W2_files_to_skip_compute(run_dir)
+	backdate_W2_files_to_skip_compute(run_dir)
     
     return True
 

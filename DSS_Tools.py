@@ -42,7 +42,22 @@ def data_from_dss(dss_file,dss_rec,starttime_str, endtime_str,):
     tsc = dssFm.read(dss_rec, starttime_str, endtime_str, False).getData()
     dssFm.close()
     return tsc.values
- 
+
+def min_ts(dss_file,dss_rec,min_value,dss_outfile,f_part):
+    dss = HecDss.open(dss_file)
+    tsm = dss.read(dss_rec)
+    tsc = tsm.getData()
+    dss.close()
+
+    for vi, v in enumerate(tsc.values):
+        tsc.values[vi] = max(v, min_value)
+
+    pathparts = dss_rec.split('/')
+    pathparts[-2] = f_part
+    tsc.fullName = '/'.join(pathparts)
+    dss_out = HecDss.open(dss_outfile)
+    dss_out.write(tsc)
+    dss_out.close()
 
 def hectime_to_datetime(tsc):
 
