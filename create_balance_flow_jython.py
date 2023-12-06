@@ -228,6 +228,7 @@ def create_balance_flows(currentAlt, timewindow, res_name, inflow_records, outfl
 
         if units.lower() == 'cms':
             currentAlt.addComputeMessage('Converting cms to cfs')
+            print('Converting inflow to cms to cfs')
             convvals = []
             for flow in values:
                 convvals.append(flow * 35.314666213)
@@ -269,6 +270,7 @@ def create_balance_flows(currentAlt, timewindow, res_name, inflow_records, outfl
 
         if units.lower() == 'cms':
             currentAlt.addComputeMessage('Converting cms to cfs')
+            print('Converting outflow cms to cfs')
             convvals = []
             for flow in values:
                 convvals.append(flow * 35.314666213)
@@ -304,6 +306,14 @@ def create_balance_flows(currentAlt, timewindow, res_name, inflow_records, outfl
             stage = stage[:(len(hectimes) - st_offset)]
             hectimes = hectimes[:(len(hectimes) - st_offset)]
         print('Number Stage Values: {0}'.format(len(stage)))
+
+        if tsc.units.lower() == 'm':
+            currentAlt.addComputeMessage('Converting stage m to ft')
+            print('Converting stage cms to cfs')
+            convvals = []
+            for elev in stage:
+                convvals.append(elev * 3.280839895)
+            stage = convvals
         
     except HecMathException:
         currentAlt.addComputeMessage('ERROR reading' + str(stage_record))
@@ -386,9 +396,11 @@ def create_balance_flows(currentAlt, timewindow, res_name, inflow_records, outfl
     dssFm_out = HecDss.open(output_dss_file)
     
     # Output record
-    # copy back 1st balance flow record 2 steps, instead of writing from 1st valid balance calc.
-    # otherwise, time-averaging the balanece flows later leaves off the 1st time step needed for a ResSim run
-    # best we can do I guess to make ResSim computes work
+
+	# sometimes ResSim does not include the start record in period average simulations, so if one flow or elevation data
+	# record is missing, the calc can sometimes go way off.  Constrain to realistic values, set invalid to zero.
+    if flow_resid[0] > 300000.0 or flow_resid[0] < -300000.0:
+        flow_resid[0] = 0.0
 
     steptime = times[1]-times[0]
     tsc = TimeSeriesContainer()
@@ -397,6 +409,10 @@ def create_balance_flows(currentAlt, timewindow, res_name, inflow_records, outfl
     tsc.interval = int(balance_period)*60
     tsc.fullName = output_dss_record_name
     #tsc.values = flow_resid
+
+    # copy back 1st balance flow record 2 steps, instead of writing from 1st valid balance calc.
+    # otherwise, time-averaging the balanece flows later leaves off the 1st time step needed for a ResSim run
+    # best we can do I guess to make ResSim computes work
     tsc.values = [flow_resid[0],flow_resid[0]] + flow_resid
     #tsc.startTime = times[1]
     tsc.units = 'CFS'

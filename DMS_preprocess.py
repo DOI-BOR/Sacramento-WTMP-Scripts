@@ -27,7 +27,7 @@ reload(Acc_Dep_ResSim_SacTrn)
 import DSS_Tools
 reload(DSS_Tools)
 
-units_need_fixing = ['tenths','m/s','deg',] #'radians',]
+units_need_fixing = ['tenths','m/s','deg','kph'] #'radians',]
 
 def fix_DMS_types_units(dss_file):
     '''This method was implemented to change data types to PER-AVER that are not coming from the DMS that way'''
@@ -71,6 +71,23 @@ def fix_DMS_types_units(dss_file):
                 for i in range(len(tsc.values)) :
                     tsc.values[i] = tsc.values[i] / 360.0 * (2*3.141592653589793)                
                 dss.write(tsc)
+            if tsm.getUnits() == 'kph':
+                # convert to m/s 
+                tsc = tsm.getData()
+                tsc.units = 'm/s'
+                for i in range(len(tsc.values)) :
+                    tsc.values[i] = tsc.values[i] / 3.6
+                dss.write(tsc)
+
+                # also, add w2link
+                rec_parts = tsc.fullName.split('/')
+                if not "w2link" in rec_parts[3].lower():
+                    rec_parts[3] += '-W2link'
+                    tsc.fullName = '/'.join(rec_parts)
+                    for i in range(len(tsc.values)) :
+                        tsc.values[i] = tsc.values[i] / 3.6
+                    dss.write(tsc)
+ 
             if tsm.getUnits() == 'm/s':
                 # make a copy divied by kph conversion as a hack to get W2 linking the wind speed correctly 
                 tsc = tsm.getData()
@@ -310,8 +327,23 @@ def preprocess_W2_5Res(currentAlternative, computeOptions):
     met_dss_file = os.path.join(shared_dir,'DMS_SacTrnMet.dss')
     fix_DMS_types_units(met_dss_file)
 
+    DSS_Tools.create_constant_dss_rec(currentAlternative, rtw, output_dss_file, constant=0.001, what='flow', 
+                        dss_type='PER-AVER', period='1DAY',cpart='TinyFlow',fpart='TinyFlow')
+    DSS_Tools.create_constant_dss_rec(currentAlternative, rtw, output_dss_file, constant=0.001, what='flow', 
+                        dss_type='PER-AVER', period='1HOUR',cpart='TinyFlow',fpart='TinyFlow')
+    DSS_Tools.create_constant_dss_rec(currentAlternative, rtw, output_dss_file, constant=10.0, what='temp-water', 
+                        dss_type='PER-AVER', period='1DAY',cpart='TENS',fpart='TENS')
+    DSS_Tools.create_constant_dss_rec(currentAlternative, rtw, output_dss_file, constant=0.0, what='flow', 
+                        dss_type='PER-AVER', period='1DAY',cpart='ZEROS',fpart='ZEROS')
+    DSS_Tools.create_constant_dss_rec(currentAlternative, rtw, output_dss_file, constant=0.0, what='flow', 
+                        dss_type='PER-AVER', period='1HOUR',cpart='ZEROS',fpart='ZEROS')
+
     splice_lewiston_met_data(currentAlternative, rtw, met_dss_file, output_dss_file, months=[1,2,3,12])
     compute_5Res_outflows(currentAlternative, rtw, hydro_dss, output_dss_file)
+
+	# link these flows for W2, to avoid zero-dam-flow situations - needs to be above 2.0 cfs for the flowweightaverage script to recognize it :/
+    DSS_Tools.min_ts(output_dss_file, '/MR Sac.-Trinity Lake/TRN-GenerationG1G2_Sum/Flow//1Hour/ResSim_PreProcess/', 2.0, output_dss_file, 'min_flow')
+    DSS_Tools.min_ts(output_dss_file, '/MR Sac.-Lewiston Res./LEW-Gen_plus_Outlet Release/Flow//1Hour/ResSim_PreProcess/', 2.0, output_dss_file, 'min_flow')
 
 
 def preprocess_ResSim_5Res(currentAlternative, computeOptions):
