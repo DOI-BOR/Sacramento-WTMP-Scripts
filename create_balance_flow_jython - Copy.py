@@ -160,9 +160,35 @@ def read_ts_rec_w_optional_fname(dssFm, pathname, starttime_str, endtime_str):
     return tsc
 
 
-def read_inflows_outflows(currentAlt, dss_file, inflow_records, outflow_records, starttime_str, endtime_str,
-                          starttime_hectime, endtime_hectime):
+def create_balance_flows(currentAlt, timewindow, res_name, inflow_records, outflow_records, stage_record, evap_record,
+                         elev_stor_area, dss_file, output_dss_record_name, output_dss_file, shared_dir,
+                         storage_dss_record_name='', evap_dss_record_name='',
+                         balance_period_str="1HOUR", use_conic=False, write_evap=False, write_storage=False,
+                         alt_period=None,alt_period_string=None, lookback_padding=1440):
 
+
+    check_dss_intervals(inflow_records, balance_period_str, currentAlt)
+    check_dss_intervals(outflow_records, balance_period_str, currentAlt)
+    check_dss_intervals([stage_record, evap_record], balance_period_str, currentAlt)
+    
+    balance_period = get_balance_period(balance_period_str) # convert to (float) hours
+    print('balance_period ' + str(balance_period))
+    
+    cfs_2_acreft = balance_period * 3600. / 43559.9
+    acreft_2_cfs = 1. / cfs_2_acreft
+
+    starttime_str = timewindow.getStartTimeString()
+    endtime_str = timewindow.getEndTimeString()
+    #01Jan2014 0000
+
+    # add lookback padding to enable ResSim to have balance flows on 1st timestep
+    # starttime_hectime_obj = HecTime(starttime_str).add(lookback_padding)
+    # starttime_str = starttime_hectime_obj.date()
+
+
+    starttime_hectime = HecTime(starttime_str).value()
+    endtime_hectime = HecTime(endtime_str).value()
+    currentAlt.addComputeMessage('Looking from {0} to {1}'.format(starttime_str, endtime_str))
     dssFm = HecDss.open(dss_file)
 
     inflows = []
@@ -256,123 +282,12 @@ def read_inflows_outflows(currentAlt, dss_file, inflow_records, outflow_records,
             for vi, v in enumerate(values):
                 outflows[vi] += v
 
-	dssFm.close()
 
     # Inflow minus outflow record
     inflow_outflow = []
     for i in range(len(inflows[1:])):
         inflow_outflow.append(inflows[i+1] - outflows[i+1])
    # this is in cfs (period avg vals)
-
-    currentAlt.addComputeMessage("Len inflow_outflow:"+str(len(inflow_outflow)))
-    currentAlt.addComputeMessage("Len times:"+str(len(times)))
-
-    return times,inflow_outflow
-
-
-def predict_elevation(currentAlt, timewindow, res_name, inflow_records, outflow_records, starting_elevation,
-                         elev_stor_area, dss_file, output_dss_record_name, output_dss_file, shared_dir,
-                         use_conic=False, alt_period=None, alt_period_string=None):
-    '''From inflows/outflows, predict hourly elevation, useful for lookback/starting elevation for forecasts starting
-    on arbitrary dates during forecast period
-    '''
-    balance_period_str = '1Hour'
-    balance_period = get_balance_period(balance_period_str) # convert to (float) hours
-    
-    check_dss_intervals(inflow_records, balance_period_str, currentAlt)
-    check_dss_intervals(outflow_records, balance_period_str, currentAlt)
-       
-    cfs_2_acreft = balance_period * 3600. / 43559.9
-    acreft_2_cfs = 1. / cfs_2_acreft
-
-    starttime_str = timewindow.getStartTimeString()
-    endtime_str = timewindow.getEndTimeString()
-    starttime_hectime = HecTime(starttime_str).value()
-    endtime_hectime = HecTime(endtime_str).value()
-
-    times,inflow_outflow = read_inflows_outflows(currentAlt, dss_file, inflow_records, outflow_records, 
-                                                 starttime_str, endtime_str, starttime_hectime, endtime_hectime)
-
-    currentAlt.addComputeMessage("Len inflow_outflow:"+str(len(inflow_outflow)))
-    currentAlt.addComputeMessage("Len times:"+str(len(times)))
-	
-	# TODO: support conic interpolation
-	# TODO: support evap, but really that's just a positive outflow....
-    storage = linear_interpolation(elev_stor_area['elev'], elev_stor_area['stor'], starting_elevation)
-    storage = [storage,]
-    elev_predicted = []
-    for i in range(len(inflow_outflow)):
-        storage.append( storage[-1] + inflow_outflow[i]*cfs_2_acreft )
-        elev_predicted.append( linear_interpolation(elev_stor_area['stor'], elev_stor_area['elev'], storage[-1]) )
-
-    # Output record
-    dssFm_out = HecDss.open(output_dss_file)
-    steptime = times[1]-times[0]
-    tsc = TimeSeriesContainer()
-    #tsc.times = times[1:]
-    tsc.startTime = times[0] - steptime
-    tsc.interval = int(balance_period)*60
-    tsc.fullName = output_dss_record_name
-    tsc.values = [starting_elevation] + elev_predicted
-    #tsc.startTime = times[1]
-    tsc.units = 'ft'
-    tsc.type = 'INST-VAL'
-    tsc.numberValues = len(tsc.values)
-    dssFm_out.write(tsc)
-
-    recparts = output_dss_record_name.split('/')
-    recparts[3] = 'STORAGE-PREDICTED'
-    tsc.startTime = times[0]
-    tsc.fullName = '/'.join(recparts)
-    tsc.values = storage
-    tsc.units = 'ac-ft'
-    tsc.type = 'PER-CUM'
-    dssFm_out.write(tsc)
-
-    if alt_period is not None:
-        if alt_period_string.lower() != balance_period_str.lower():
-            tsm = dssFm_out.read(output_dss_record_name)
-            tsm_new_interval = tsm.transformTimeSeries(alt_period_string, "", "AVE")
-            dssFm_out.write(tsm_new_interval)
-
-    dssFm_out.close()
-
-
-def create_balance_flows(currentAlt, timewindow, res_name, inflow_records, outflow_records, stage_record, evap_record,
-                         elev_stor_area, dss_file, output_dss_record_name, output_dss_file, shared_dir,
-                         storage_dss_record_name='', evap_dss_record_name='',
-                         balance_period_str="1HOUR", use_conic=False, write_evap=False, write_storage=False,
-                         alt_period=None,alt_period_string=None, lookback_padding=1440):
-
-
-    check_dss_intervals(inflow_records, balance_period_str, currentAlt)
-    check_dss_intervals(outflow_records, balance_period_str, currentAlt)
-    check_dss_intervals([stage_record, evap_record], balance_period_str, currentAlt)
-    
-    balance_period = get_balance_period(balance_period_str) # convert to (float) hours
-    print('balance_period ' + str(balance_period))
-    
-    cfs_2_acreft = balance_period * 3600. / 43559.9
-    acreft_2_cfs = 1. / cfs_2_acreft
-
-    starttime_str = timewindow.getStartTimeString()
-    endtime_str = timewindow.getEndTimeString()
-    #01Jan2014 0000
-
-    # add lookback padding to enable ResSim to have balance flows on 1st timestep
-    # starttime_hectime_obj = HecTime(starttime_str).add(lookback_padding)
-    # starttime_str = starttime_hectime_obj.date()
-
-    starttime_hectime = HecTime(starttime_str).value()
-    endtime_hectime = HecTime(endtime_str).value()
-    currentAlt.addComputeMessage('Looking from {0} to {1}'.format(starttime_str, endtime_str))
-
-    times,inflow_outflow = read_inflows_outflows(currentAlt, dss_file, inflow_records, outflow_records, 
-                                                 starttime_str, endtime_str, starttime_hectime, endtime_hectime)
-    print('len times:',len(times))
-    print('len inflow_outflow:',len(inflow_outflow))
-
-    dssFm = HecDss.open(dss_file)
 
     # Read stage
     print('Reading stage')

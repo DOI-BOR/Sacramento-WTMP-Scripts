@@ -1,5 +1,6 @@
 #version 2.0
 #modified 03-28-2023 by Scott Burdick-Yahya
+#modifed Dec 2023 by Ben Saenz
 
 from hec.heclib.dss import HecDss
 from hec.io import DSSIdentifier
@@ -9,12 +10,17 @@ from hec.hecmath import HecMathException
 from hec.heclib.util.Heclib import UNDEFINED_DOUBLE
 import hec.hecmath.TimeSeriesMath as tsmath
 from com.rma.model import Project
-import os,shutil,copy
+import os,shutil,copy,sys
 from java.util import Vector, Date
 
 import datetime
-from hec.heclib.util import HecTime  # Replace with actual import
+from hec.heclib.util import HecTime
 
+def first_value(dss_file,dss_rec):
+    dssFm = HecDss.open(dss_file)        
+    tsc = dssFm.get(dss_rec,True)
+    dssFm.close()
+    return tsc.values[0]
 
 def standardize_interval(tsm, interval, makePerAver=True):
     tsc = tsm.getData()
@@ -37,27 +43,15 @@ def standardize_interval(tsm, interval, makePerAver=True):
         return tsm
 
 
-def data_from_dss(dss_file,dss_rec,starttime_str, endtime_str,):
-    dssFm = HecDss.open(dss_file)        
-    tsc = dssFm.read(dss_rec, starttime_str, endtime_str, False).getData()
+def data_from_dss(dss_file,dss_rec,starttime_str, endtime_str):
+    dssFm = HecDss.open(dss_file)
+    if starttime_str is None and endtime_str is None:
+        tsc = dssFm.get(dss_rec,True)
+    else:
+        tsc = dssFm.read(dss_rec, starttime_str, endtime_str, False).getData()
     dssFm.close()
     return tsc.values
 
-def min_ts(dss_file,dss_rec,min_value,dss_outfile,f_part):
-    dss = HecDss.open(dss_file)
-    tsm = dss.read(dss_rec)
-    tsc = tsm.getData()
-    dss.close()
-
-    for vi, v in enumerate(tsc.values):
-        tsc.values[vi] = max(v, min_value)
-
-    pathparts = dss_rec.split('/')
-    pathparts[-2] = f_part
-    tsc.fullName = '/'.join(pathparts)
-    dss_out = HecDss.open(dss_outfile)
-    dss_out.write(tsc)
-    dss_out.close()
 
 def hectime_to_datetime(tsc):
 
@@ -168,11 +162,24 @@ def add_DSS_Data(currentAlt, dssFile, timewindow, input_data, output_path):
     return 0
 
 def resample_dss_ts(inputDSSFile, inputRec, timewindow, outputDSSFile, newPeriod):
-    '''Can upsample an even period DSS timeseries, e.g. go from 1DAY -> 1HOUR'''
+    '''Can upsample an even period DSS timeseries, e.g. go from 1DAY -> 1HOUR, or downsample.  However, hecmath likes to
+    clip of days that don't have the complete 24 hour cycle.  So, we pad here, but there is a chance we ask for data not
+    available. The read gives garbage data and doens't complain.  
+    TODO: fiugre out how to check for bounds for non-midnight start and end times.
+    '''
     dssFm = HecDss.open(inputDSSFile)
-    starttime_str = timewindow.getStartTimeString()
-    endtime_str = timewindow.getEndTimeString()
-    tsm = dssFm.read(inputRec, starttime_str, endtime_str, False)
+    if timewindow is not None:
+        starttime_str = timewindow.getStartTimeString()
+        endtime_str = timewindow.getEndTimeString()
+        #if newPeriod.lower() == '1day':  # some computes don't end on 2400, causes problems when last day doesn't get produced in this func
+        starttime_str = starttime_str[:-4] + '0000'
+        endtime_str = endtime_str[:-4] + '2400' # clipped days don't work in computes ... hope the downloaded DMS data is long enough to do this.
+        print('Resampling',newPeriod, inputRec,starttime_str,endtime_str)
+        tsm = dssFm.read(inputRec, starttime_str, endtime_str, False)
+    else:
+        print('Resampling',newPeriod, inputRec)
+        tsm = dssFm.read(inputRec)
+
     tsm_new = tsm.transformTimeSeries(newPeriod,"","AVE")
     dssFm.close()
 
@@ -198,6 +205,20 @@ def airtemp_lapse(dss_file,dss_rec,lapse_in_C,dss_outfile,f_part):
     dss_out.write(tsc)
     dss_out.close()
 
+def min_ts(dss_file,dss_rec,min_value,dss_outfile,f_part):
+    dss = HecDss.open(dss_file)
+    tsc = dss.get(dss_rec,True)
+    dss.close()
+
+    for vi, v in enumerate(tsc.values):
+        tsc.values[vi] = max(v, min_value)
+
+    pathparts = dss_rec.split('/')
+    pathparts[-2] = f_part
+    tsc.fullName = '/'.join(pathparts)
+    dss_out = HecDss.open(dss_outfile)
+    dss_out.write(tsc)
+    dss_out.close()
 
 def add_flows(currentAlt, timewindow, inflow_records, dss_file, output_dss_record_name, output_dss_file):
      
@@ -224,8 +245,15 @@ def add_flows(currentAlt, timewindow, inflow_records, dss_file, output_dss_recor
         try:
        
             print(starttime_str, endtime_str)
-            print(dss_file)
-            ts = dssFm.read(pathname, starttime_str, endtime_str, False)
+            if '::' in inflow_record:
+                dss_file_alt,inflow_rec_alt = inflow_record.split('::')
+                dssFm_alt = HecDss.open(dss_file_alt)
+                ts = dssFm_alt.read(inflow_rec_alt, starttime_str, endtime_str, False)
+                dssFm_alt.close()
+                print(dss_file_alt)
+            else:
+                print(dss_file)
+                ts = dssFm.read(pathname, starttime_str, endtime_str, False)
             ts_data = ts.getData()
             values = ts_data.values
             hectimes = ts_data.times
@@ -312,8 +340,15 @@ def add_or_subtract_flows(currentAlt, timewindow, inflow_records, dss_file, oper
         try:
        
             print(starttime_str, endtime_str)
-            print(dss_file)
-            ts = dssFm.read(pathname, starttime_str, endtime_str, False)
+            if '::' in inflow_record:
+                dss_file_alt,inflow_rec_alt = inflow_record.split('::')
+                dssFm_alt = HecDss.open(dss_file_alt)
+                ts = dssFm_alt.read(inflow_rec_alt, starttime_str, endtime_str, False)
+                dssFm_alt.close()
+                print(dss_file_alt)
+            else:            	
+                ts = dssFm.read(pathname, starttime_str, endtime_str, False)                
+                print(dss_file)
             ts_data = ts.getData()
             values = ts_data.values
             hectimes = ts_data.times
@@ -408,6 +443,12 @@ def create_constant_dss_rec(currentAlt, timewindow, output_dss_file, constant=0.
     elif what.lower()=='gate':
         units = 'n/a'
         parameter = 'gate'
+    elif what.lower()=='evap':
+        units = 'ft'
+        parameter = 'evap'
+    elif what.lower()=='elev':
+        units = 'ft'
+        parameter = 'elev'
     else:
         currentAlt.addComputeMessage('create_zero_dss_rec: what not known: %s'%what)
         return False
@@ -455,3 +496,36 @@ def create_constant_dss_rec(currentAlt, timewindow, output_dss_file, constant=0.
     dssFm.close()
 
     return True
+
+
+def calculate_relative_humidity(air_temp, dewpoint_temp):
+    """
+    Calculate Relative Humidity given the air temperature and dewpoint temperature - August-Roche-Magnus approximation
+
+    :param air_temp: Air Temperature in degrees Celsius
+    :param dewpoint_temp: Dew Point Temperature in degrees Celsius
+    :return: Relative Humidity in percentage
+    """
+    numerator = (112.0 - 0.1 * dewpoint_temp + air_temp)
+    denominator = (112.0 + 0.9 * air_temp)
+    exponent = ((17.62 * dewpoint_temp) / (243.12 + dewpoint_temp)) - ((17.62 * air_temp) / (243.12 + air_temp))
+    relative_humidity = 100.0 * (numerator / denominator) * math.exp(exponent)
+    return max(0.01, min(100.0, relative_humidity))
+
+
+def relhum_from_at_dp(met_dss_file, at_path, dp_path):
+    dss = HecDss.open(met_dss_file)
+    tsc = dss.read(at_path).getData()
+    dp_data = DSS_Tools.data_from_dss(met_dss_file, dp_path, None, None)
+    for i in range(tsc.numberValues):
+        tsc.values[i] = calculate_relative_humidity(tsc.values[i], dp_data[i])
+    parts = tsc.fullName.split('/')
+    parts[2] = parts[2][:5]
+    parts[3] = 'RELHUM-FROM-AT-DP'
+    parts[6] = parts[6] + '-DERIVED'
+    new_pathname = '/'.join(parts)
+    tsc.fullName = new_pathname
+    tsc.units = '%'
+    print('writing: ', new_pathname)
+    dss.write(tsc)
+    dss.close()

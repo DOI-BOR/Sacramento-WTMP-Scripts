@@ -149,6 +149,41 @@ def eq_temp(rtw,at,cl,ws,sr,td,eq_temp_out):
     dssFmOut.write(tsm_wk)
     dssFmOut.close()
 
+def storage_to_elev(res_name,elev_stor_area,forecast_dss,storage_rec,conic=False):
+    dssFmRec = HecDss.open(forecast_dss)
+    tsc = dssFmRec.get(storage_rec,True)
+
+    elev = []
+    if conic:
+        print('Conic interpolation of elevations not supported yet.')
+        sys.exit(-1)
+    else:
+        for j in range(tsc.numberValues):
+            elev.append(cbfj.linear_interpolation(elev_stor_area['stor'], elev_stor_area['elev'], tsc.values[j]))
+
+    recparts = tsc.fullName.split('/')
+    recparts[2] = res_name
+    recparts[3] = 'ELEV'
+    tsc.fullName = '/'.join(recparts)
+    tsc.units = 'ft'
+    tsc.type = 'INST-VAL'
+    tsc.values = elev
+    dssFmRec.write(tsc)
+    dssFmRec.close()
+
+def invent_elevation(res_name,forecast_dss,storage_rec,elev_constant_ft):
+    dssFmRec = HecDss.open(forecast_dss)
+    tsc = dssFmRec.get(storage_rec,True)
+    recparts = tsc.fullName.split('/')
+    recparts[2] = res_name
+    recparts[3] = 'ELEV'
+    tsc.fullName = '/'.join(recparts)
+    tsc.units = 'ft'
+    tsc.type = 'INST-VAL'
+    tsc.values = [elev_constant_ft for j in range(tsc.numberValues)]
+    dssFmRec.write(tsc)
+    dssFmRec.close()
+
 
 def forecast_data_preprocess_ResSim_5Res(currentAlternative, computeOptions):
     dss_file = computeOptions.getDssFilename()
@@ -202,6 +237,18 @@ def forecast_data_preprocess_ResSim_5Res(currentAlternative, computeOptions):
             [output_dss_file,"/MR Sac.-Clear Cr. to Sac R./KRDD/Temp-Equil//1Hour/sactrn_bc_script/"]
            )
 
+	# covert storage to elevation
+    elev_stor_area = cbfj.read_elev_storage_area_file(os.path.join(shared_dir, 'AMR_scratch_shasta.csv'), 'Shasta')
+    storage_to_elev('Shasta Lake',elev_stor_area,forecast_dss,'/SACRAMENTO RIVER/SHASTA LAKE/STORAGE//1MON/SACTRN_BC_SCRIPT/',conic=False)
+    elev_stor_area = cbfj.read_elev_storage_area_file(os.path.join(shared_dir, 'AMR_scratch_trinity.csv'), 'trinity')
+    storage_to_elev('Trinity Lake',elev_stor_area,forecast_dss,'/TRINITY RIVER/TRINITY LAKE/STORAGE//1MON/SACTRN_BC_SCRIPT/',conic=False)
+    elev_stor_area = cbfj.read_elev_storage_area_file(os.path.join(shared_dir, 'AMR_scratch_whiskeytown.csv'), 'Whiskeytown')
+    storage_to_elev('Whiskeytown Lake',elev_stor_area,forecast_dss,'/CLEAR CREEK/WHISKEYTOWN LAKE/STORAGE//1MON/SACTRN_BC_SCRIPT/',conic=False)
+
+    # invent Natoma elevation record from shasta storage rec (used for timing only)
+    invent_elevation('Keswick Reservoir',forecast_dss,'/SACRAMENTO RIVER/SHASTA LAKE/STORAGE//1MON/SACTRN_BC_SCRIPT/',582.0)
+    invent_elevation('Lewiston Reservoir',forecast_dss,'/SACRAMENTO RIVER/SHASTA LAKE/STORAGE//1MON/SACTRN_BC_SCRIPT/',1901.0)
+
 	# TODO: Perhaps generate tributary flows/temps based on exceedence and/or temp regressions?
 
     # TODO: Generate Flow records needed for plotting
@@ -231,13 +278,11 @@ def computeAlternative(currentAlternative, computeOptions):
     currentAlternative.addComputeMessage("Computing ScriptingAlternative:" + currentAlternative.getName())
     currentAlternative.addComputeMessage('\n')
 
-    # --------- TEMPORARY TO FIX DMS F-PARTS
-    #fix_DMS_parts(currentAlternative, computeOptions)
-    # --------- TEMPORARY TO FIX DMS F-PARTS
+    # calcs radians, fixes/prepares other units
+    fix_DMS_parts(currentAlternative, computeOptions)
 
     data_preprocess = forecast_data_preprocess_ResSim_5Res(currentAlternative, computeOptions)
 
-    #acc_dep = acc_dep_5Res_ResSim(currentAlternative, computeOptions)
 
     if data_preprocess: #and acc_dep:
     	return True
