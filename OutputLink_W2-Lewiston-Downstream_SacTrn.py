@@ -66,7 +66,7 @@ def computeAlternative(currentAlternative, computeOptions):
     currentAlternative.addComputeMessage("Outputting to {0}".format(outputpath))
 
     cfs_limit = 1.0 #float
-    flowweightaverage.FWA(currentAlternative, dss_file, rtw, locations, outputpath, cfs_limit)
+    flowweightaverage.FWA2(currentAlternative, dss_file, rtw, locations, outputpath, cfs_limit, 10.0)
     
 
     # Add tunnel heating to Clear Creek tunnel temperatures
