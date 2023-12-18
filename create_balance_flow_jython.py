@@ -272,11 +272,10 @@ def read_inflows_outflows(currentAlt, dss_file, inflow_records, outflow_records,
 
 def predict_elevation(currentAlt, timewindow, res_name, inflow_records, outflow_records, starting_elevation,
                          elev_stor_area, dss_file, output_dss_record_name, output_dss_file, shared_dir,
-                         use_conic=False, alt_period=None, alt_period_string=None):
+                         use_conic=False, alt_period=None, alt_period_string=None, balance_period_str='1Hour'):
     '''From inflows/outflows, predict hourly elevation, useful for lookback/starting elevation for forecasts starting
     on arbitrary dates during forecast period
     '''
-    balance_period_str = '1Hour'
     balance_period = get_balance_period(balance_period_str) # convert to (float) hours
     
     check_dss_intervals(inflow_records, balance_period_str, currentAlt)
