@@ -164,8 +164,8 @@ def add_DSS_Data(currentAlt, dssFile, timewindow, input_data, output_path):
 def resample_dss_ts(inputDSSFile, inputRec, timewindow, outputDSSFile, newPeriod):
     '''Can upsample an even period DSS timeseries, e.g. go from 1DAY -> 1HOUR, or downsample.  However, hecmath likes to
     clip of days that don't have the complete 24 hour cycle.  So, we pad here, but there is a chance we ask for data not
-    available. The read gives garbage data and doens't complain.  
-    TODO: fiugre out how to check for bounds for non-midnight start and end times.
+    available. The read gives garbage data and doesn't complain.  
+    TODO: figure out how to check for bounds for non-midnight start and end times.
     '''
     dssFm = HecDss.open(inputDSSFile)
     if timewindow is not None:
@@ -178,7 +178,7 @@ def resample_dss_ts(inputDSSFile, inputRec, timewindow, outputDSSFile, newPeriod
         tsm = dssFm.read(inputRec, starttime_str, endtime_str, False)
     else:
         print('Resampling',newPeriod, inputRec)
-        tsm = dssFm.read(inputRec)
+        tsm = dssFm.read(inputRec)  # caution - 'read' sometimes doesn't get whole record?  Need to use get?
 
     tsm_new = tsm.transformTimeSeries(newPeriod,"","AVE")
     dssFm.close()
@@ -529,3 +529,83 @@ def relhum_from_at_dp(met_dss_file, at_path, dp_path):
     print('writing: ', new_pathname)
     dss.write(tsc)
     dss.close()
+
+def check_start_and_end(values, times, startime, endtime):
+    if times[0] < startime:  # if startdate is before the timewindow..
+        print('start date ({0}) from DSS before timewindow ({1})..'.format(times[0], startime))
+        st_offset = (startime - times[0]) / (times[1] - times[0])
+        values = values[st_offset:]
+        times = times[st_offset:]
+    if times[-1] > endtime:
+        print('end date ({0}) from DSS after timewindow ({1})..'.format(times[-1], endtime))
+        st_offset = (times[-1] - endtime) / (times[1] - times[0])
+        values = values[:(len(times) - st_offset)]
+        times = times[:(len(times) - st_offset)]
+    return values, times
+
+
+def replace_data(currentAlt, timewindow, pairs, dss_file, dss_outfile, months, standard_interval=None):
+    starttime_str = timewindow.getStartTimeString()
+    endtime_str = timewindow.getEndTimeString()
+    # 01Jan2014 0000
+    starttime_hectime = HecTime(starttime_str).value()
+    endtime_hectime = HecTime(endtime_str).value()
+    currentAlt.addComputeMessage('Looking from {0} to {1}'.format(starttime_str, endtime_str))
+    for pair in pairs:
+        dssFm = HecDss.open(dss_file)
+        currentAlt.addComputeMessage('Replacing data for {0} with {1} during {2}'.format(pair[0], pair[1], months))
+        base = dssFm.read(pair[0], starttime_str, endtime_str, False)
+        if standard_interval is not None:
+            base = standardize_interval(base,standard_interval)
+        base_data = base.getData()
+        base_values = base_data.values
+        base_hectimes = base_data.times
+        base_units = base_data.units
+        base_interval = base_data.interval
+        base_type = base_data.type
+        base_values, base_hectimes = check_start_and_end(base_values, base_hectimes, starttime_hectime, endtime_hectime)
+
+        alt = dssFm.read(pair[1], starttime_str, endtime_str, False)
+        if standard_interval is not None:
+            alt = standardize_interval(alt,standard_interval)
+        alt_data = alt.getData()
+        alt_values = alt_data.values
+        alt_hectimes = alt_data.times
+        alt_units = alt_data.units
+        alt_interval = alt_data.interval
+        alt_values, alt_hectimes = check_start_and_end(alt_values, alt_hectimes, starttime_hectime, endtime_hectime)
+
+        dssFm.close()
+
+        if base_units != alt_units:
+            currentAlt.addComputeMessage('Units do not match for {0} and {1}, skipping'.format(pair[0], pair[1]))
+            dssFm.close()
+            sys.exit(1)
+        if base_interval != alt_interval:
+            currentAlt.addComputeMessage('Intervals do not match for {0} and {1}, changing interval...'.format(pair[0], pair[1]))
+            dssFm.close()
+            sys.exit(1)
+
+        for i in range(len(base_values)):
+            if base_data.getHecTime(i).month() in months:
+                base_values[i] = alt_values[i]
+                #print('replaced {0}'.format(base_data.getHecTime(i)))
+
+        new_pathname = base_data.fullName.split('/')
+        alt_pathname = alt_data.fullName.split('/')
+        new_pathname[-2] = 'MergedFrom_{0}'.format(alt_pathname[1])
+        new_pathname = '/'.join(new_pathname)
+        print('writing: ',new_pathname)
+        tsc = TimeSeriesContainer()
+        tsc.times = base_hectimes
+        tsc.fullName = new_pathname
+        tsc.values = base_values
+        tsc.units = base_units
+        tsc.type = base_type
+        tsc.numberValues = len(base_values)
+
+        dssFmOut = HecDss.open(dss_outfile)
+        dssFmOut.write(tsc)
+
+        dssFm.close()
+        dssFmOut.close()

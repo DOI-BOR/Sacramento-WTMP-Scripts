@@ -24,7 +24,7 @@ def computeAlternative(currentAlternative, computeOptions):
     currentAlternative.addComputeMessage("Computing ScriptingAlternative:" + currentAlternative.getName())
     currentAlternative.addComputeMessage('\n')
 
-    data_preprocess = fpp.forecast_data_preprocess_ResSim_5Res(currentAlternative, computeOptions)
+    data_preprocess = fpp.forecast_data_preprocess_W2_5Res(currentAlternative, computeOptions)
 
     if data_preprocess: #and acc_dep:
     	return True

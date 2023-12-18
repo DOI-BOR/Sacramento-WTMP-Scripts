@@ -72,40 +72,47 @@ def FWA2(currentAlt, dssFile, timewindow, DSSPaths_list, outputname, cfs_limit=N
         tsc_flow = dssFm.read(flow_dss_path, starttime_str, endtime_str, False).getData()
         flows = flow_in_cfs(tsc_flow.units,tsc_flow.values)
         print('FWA2 Reading:',temp_dss_path)
-        tsc_temp = dssFm.read(temp_dss_path, starttime_str, endtime_str, False).getData()
-        temps = temperature_in_C(tsc_temp.units,tsc_temp.values)
-        print('tscf',tsc_flow.values[0])
-        print(flows[0])
-        print('tsct',tsc_temp.values[0])
-        print(temps[0])
-
-        # use type of 1st temp record
-        if dspi==0:
-            nrecs = len(flows)
-            temp_type = tsc_temp.type
-
-        if len(flows) != nrecs or len(temps) != nrecs:
-            currentAlt.addComputeMessage("FWA2: record lengths do not match!")
-            print("FWA2: record lengths do not match!",nrecs,len(flows),len(temps))
-            sys.exit(-1)
-
-        for i in range(nrecs):
-            if dspi==0:
-                n_pairs.append(0) # init counter for number of flow/temp pairs in weighted average
-                flow_total.append(0.0)
-                flowtemp_total.append(0.0)
-            # perform a lot of checks on data
-            print(i,flows[i],temps[i])
-            if not math.isnan(flows[i]) and not math.isnan(temps[i]):
-                if flows[i] > flow_limit and flows[i] < 9.0e6: # could lower upper limit to something relevant to watershed
-                    if temps[i] >= 0.0 and temps[i] <= 80.0:
-                        # passed the data checks
-                        
-                        n_pairs[i] += 1
-                        flow_total[i] += flows[i]
-                        flowtemp_total[i] += flows[i]*temps[i]
-
-                        print(dspi,i,n_pairs[i],flows[i],temps[i],flow_total[i],flowtemp_total[i])
+        last_rec_valid = False  # test to see if we can use override values
+        try:
+	        tsc_temp = dssFm.read(temp_dss_path, starttime_str, endtime_str, False).getData()
+	        temps = temperature_in_C(tsc_temp.units,tsc_temp.values)
+	        print('tscf',tsc_flow.values[0])
+	        print(flows[0])
+	        print('tsct',tsc_temp.values[0])
+	        print(temps[0])
+	
+	        # use type of 1st temp record
+	        if dspi==0:
+	            nrecs = len(flows)
+	            temp_type = tsc_temp.type
+	
+	        if len(flows) != nrecs or len(temps) != nrecs:
+	            currentAlt.addComputeMessage("FWA2: record lengths do not match!")
+	            print("FWA2: record lengths do not match!",nrecs,len(flows),len(temps))
+	            sys.exit(-1)
+	
+	        for i in range(nrecs):
+	            if dspi==0:
+	                n_pairs.append(0) # init counter for number of flow/temp pairs in weighted average
+	                flow_total.append(0.0)
+	                flowtemp_total.append(0.0)
+	            # perform a lot of checks on data
+	            #print(i,flows[i],temps[i])
+	            if not math.isnan(flows[i]) and not math.isnan(temps[i]):
+	                if flows[i] > flow_limit and flows[i] < 9.0e6: # could lower upper limit to something relevant to watershed
+	                    if temps[i] >= 0.0 and temps[i] <= 80.0:
+	                        # passed the data checks
+	                        
+	                        n_pairs[i] += 1
+	                        flow_total[i] += flows[i]
+	                        flowtemp_total[i] += flows[i]*temps[i]
+	
+	                        #print(dspi,i,n_pairs[i],flows[i],temps[i],flow_total[i],flowtemp_total[i])
+	        last_rec_valid = True
+        except:
+	        currentAlt.addComputeMessage('FWA2: data not addeded for record: '+temp_dss_path)
+	        last_rec_valid = False
+		
     fwat = []
     print('nrecs:',nrecs)
     for i in range(nrecs):
@@ -113,7 +120,7 @@ def FWA2(currentAlt, dssFile, timewindow, DSSPaths_list, outputname, cfs_limit=N
             fwat.append(flowtemp_total[i]/flow_total[i])		
         else:
             fwat.append(fill_value)
-        if last_override:
+        if last_override and last_rec_valid:
             if flows[i] > flow_limit and flows[i] < 9.0e6: # could lower upper limit to something relevant to watershed
                 if temps[i] >= 0.0 and temps[i] <= 80.0:
                     fwat[i] = temps[i]

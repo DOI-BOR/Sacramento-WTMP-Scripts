@@ -76,6 +76,8 @@ def interp(x, xp, fp, left=None, right=None):
                     t = (x - xp[i]) / (xp[i+1] - xp[i])
                     return fp[i] + t * (fp[i+1] - fp[i])
 
+
+
 def eq_temp(rtw,at,cl,ws,sr,td,eq_temp_out):
     starttime_str = rtw.getStartTimeString()
     endtime_str = rtw.getEndTimeString()
@@ -129,14 +131,6 @@ def storage_to_elev(res_name,elev_stor_area,forecast_dss,storage_rec,conic=False
             elev.append(cbfj.linear_interpolation(elev_stor_area['stor'], elev_stor_area['elev'], tsc.values[j]))
             print('stor2elev: ',j,tsc.times[j],tsc.values[j])
 
-    #if tsc.type.lower != 'inst-val':
-    #    # going from PER-CUM -> INST-VAL, so need to move the times up one to account for the end-of-period reporting of PER-CUM
-    #    time_delta = tsc.times[1] - tsc.times[0]
-    #    times = [tsc.times[0]-time_delta]
-    #    for j in range(tsc.numberValues-1):
-    #        times.append(tsc.times[j])
-    #    tsc.times = times
-
     recparts = tsc.fullName.split('/')
     recparts[2] = res_name
     recparts[3] = 'ELEV'
@@ -157,35 +151,88 @@ def invent_elevation(res_name,forecast_dss,storage_rec,elev_constant_ft):
     tsc.units = 'ft'
     tsc.type = 'INST-VAL'
     tsc.values = [elev_constant_ft for j in range(tsc.numberValues)]
-
-    #if tsc.type.lower != 'inst-val':
-    #    # going from PER-CUM -> INST-VAL, so need to move the times up one to account for the end-of-period reporting of PER-CUM
-    #    time_delta = tsc.times[1] - tsc.times[0]
-    #    times = [tsc.times[0]-time_delta]
-    #    for j in range(tsc.numberValues-1):
-    #        times.append(tsc.times[j])
-    #    tsc.times = times
-    
     dssFmRec.write(tsc)
     dssFmRec.close()
 
-def write_forecast_elevations():
+def write_forecast_elevations(currentAlternative, rtw, forecast_dss, shared_dir):
 
+	# covert storage to monthly elevation
+    elev_stor_area = cbfj.read_elev_storage_area_file(os.path.join(shared_dir, 'AMR_scratch_shasta.csv'), 'Shasta')
+    storage_to_elev('Shasta Lake',elev_stor_area,forecast_dss,'/SACRAMENTO RIVER/SHASTA LAKE/STORAGE//1MON/SACTRN_BC_SCRIPT/',conic=False)
+
+    # invent flow-reg reservoir elevation record from shasta storage rec (used for timing only)
+    invent_elevation('Keswick Reservoir',forecast_dss,'/SACRAMENTO RIVER/SHASTA LAKE/STORAGE//1MON/SACTRN_BC_SCRIPT/',582.0)
+    invent_elevation('Lewiston Reservoir',forecast_dss,'/TRINITY RIVER/TRINITY LAKE/STORAGE//1MON/SACTRN_BC_SCRIPT/',1901.0)
+	
 	# write an hourly forecast elevation based on starting elevation and flows
-    DSS_Tools.resample_dss_ts(forecast_dss,'//FOLSOM/PUMPING (FP)//1Day/AMER_BC_SCRIPT/',rtw,forecast_dss,'1HOUR')
-    DSS_Tools.resample_dss_ts(forecast_dss,'//Folsom-NF-in/FLOW-IN//1Day/AMER_BC_SCRIPT/',rtw,forecast_dss,'1HOUR')
-    DSS_Tools.resample_dss_ts(forecast_dss,'//Folsom-SF-in/FLOW-IN//1Day/AMER_BC_SCRIPT/',rtw,forecast_dss,'1HOUR')
-    DSS_Tools.resample_dss_ts(forecast_dss,'/AMERICAN RIVER/FOLSOM LAKE/FLOW-ACC-DEP//1Day/AMER_BC_SCRIPT/',rtw,forecast_dss,'1HOUR')
-    inflow_records = ['//Folsom-NF-in/FLOW-IN//1Hour/AMER_BC_SCRIPT/',
-                      '//Folsom-SF-in/FLOW-IN//1Hour/AMER_BC_SCRIPT/',
-                      '/AMERICAN RIVER/FOLSOM LAKE/FLOW-ACC-DEP//1Hour/AMER_BC_SCRIPT/']  # this actually evap, but negative already, so it goes as inflow
-    outflow_records = ['//FOLSOM/FLOW-RELEASE//1Hour/AMER_BC_SCRIPT/']
-    starting_elevation = DSS_Tools.first_value(forecast_dss,'//Folsom/ELEV//1Month/AMER_BC_SCRIPT/')
+    DSS_Tools.resample_dss_ts(forecast_dss,'/SACRAMENTO RIVER/SHASTA LAKE/FLOW-RELEASE//1HOUR/SACTRN_BC_SCRIPT/',None,forecast_dss,'1DAY')
+    inflow_records = ['//SHASTA-PIT-IN/FLOW-IN//1DAY/SACTRN_BC_SCRIPT/',
+                      '//SHASTA-SAC-IN/FLOW-IN//1DAY/SACTRN_BC_SCRIPT/',
+                      '//SHASTA-SULANHARAS-IN/FLOW-IN//1DAY/SACTRN_BC_SCRIPT/',
+                      '//SHASTA-MCCLOUD-IN/FLOW-IN//1DAY/SACTRN_BC_SCRIPT/',
+                      '/SACRAMENTO RIVER/SHASTA LAKE/FLOW-ACC-DEP//1DAY/SACTRN_BC_SCRIPT/']  # this actually evap, but negative already, so it goes as inflow
+    outflow_records = ['/SACRAMENTO RIVER/SHASTA LAKE/FLOW-RELEASE//1DAY/SACTRN_BC_SCRIPT/']
+    starting_elevation = DSS_Tools.first_value(forecast_dss,'/SACRAMENTO RIVER/SHASTA LAKE/ELEV//1MON/SACTRN_BC_SCRIPT/')
     print('starting_elevation ',starting_elevation)
-    cbfj.predict_elevation(currentAlternative, rtw, 'Folsom', inflow_records, outflow_records, starting_elevation,
-                         elev_stor_area, forecast_dss, '//Folsom/ELEV-FORECAST//1HOUR/AMER_BC_SCRIPT/', forecast_dss, shared_dir,
-                         use_conic=False, alt_period=None, alt_period_string=None)
+    cbfj.predict_elevation(currentAlternative, rtw, 'Shasta Lake', inflow_records, outflow_records, starting_elevation,
+                         elev_stor_area, forecast_dss, '//Shasta Lake/ELEV-FORECAST//1DAY/AMER_BC_SCRIPT/', forecast_dss, shared_dir,
+                         use_conic=False, alt_period=None, alt_period_string=None, balance_period_str='1Day')
 
+    # Trinity
+    elev_stor_area = cbfj.read_elev_storage_area_file(os.path.join(shared_dir, 'AMR_scratch_trinity.csv'), 'trinity')
+    storage_to_elev('Trinity Lake',elev_stor_area,forecast_dss,'/TRINITY RIVER/TRINITY LAKE/STORAGE//1MON/SACTRN_BC_SCRIPT/',conic=False)
+
+    DSS_Tools.resample_dss_ts(forecast_dss,'/TRINITY RIVER/TRINITY LAKE/FLOW-RELEASE//1HOUR/SACTRN_BC_SCRIPT/',None,forecast_dss,'1DAY')
+    inflow_records = ['//EF TRINITY/FLOW-IN//1DAY/SACTRN_BC_SCRIPT/',
+                      '//STUART FORK/FLOW-IN//1DAY/SACTRN_BC_SCRIPT/',
+                      '//SWIFT CR/FLOW-IN//1DAY/SACTRN_BC_SCRIPT/',
+                      '//TRINITY RIVER/FLOW-IN//1DAY/SACTRN_BC_SCRIPT/',
+                      '/TRINITY RIVER/TRINITY LAKE/FLOW-ACC-DEP//1DAY/SACTRN_BC_SCRIPT/']  # this actually evap, but negative already, so it goes as inflow
+    outflow_records = ['/TRINITY RIVER/TRINITY LAKE/FLOW-RELEASE//1DAY/SACTRN_BC_SCRIPT/']
+    starting_elevation = DSS_Tools.first_value(forecast_dss,'/TRINITY RIVER/TRINITY LAKE/ELEV//1MON/SACTRN_BC_SCRIPT/')
+    print('starting_elevation ',starting_elevation)
+    cbfj.predict_elevation(currentAlternative, rtw, 'Trinity Lake', inflow_records, outflow_records, starting_elevation,
+                         elev_stor_area, forecast_dss, '//Trinity Lake/ELEV-FORECAST//1DAY/AMER_BC_SCRIPT/', forecast_dss, shared_dir,
+                         use_conic=False, alt_period=None, alt_period_string=None, balance_period_str='1Day')
+
+    # Whiskeytown
+    elev_stor_area = cbfj.read_elev_storage_area_file(os.path.join(shared_dir, 'AMR_scratch_whiskeytown.csv'), 'Whiskeytown')
+    storage_to_elev('Whiskeytown Lake',elev_stor_area,forecast_dss,'/CLEAR CREEK/WHISKEYTOWN LAKE/STORAGE//1MON/SACTRN_BC_SCRIPT/',conic=False)
+
+    DSS_Tools.resample_dss_ts(forecast_dss,'/CLEAR CREEK/WHISKEYTOWN LAKE/FLOW-DIVERSION-SPRING-CR//1HOUR/SACTRN_BC_SCRIPT/',None,forecast_dss,'1DAY')
+    DSS_Tools.resample_dss_ts(forecast_dss,'/CLEAR CREEK/WHISKEYTOWN DAM/FLOW-RELEASE//1HOUR/SACTRN_BC_SCRIPT/',None,forecast_dss,'1DAY')
+    DSS_Tools.resample_dss_ts(forecast_dss,'/CLEAR CREEK/CARR POWERHOUSE/FLOW-RELEASE//1HOUR/SACTRN_BC_SCRIPT/',None,forecast_dss,'1DAY')
+    inflow_records = ['/USBR-LINEARINTERP/CLEAR CR ABOVE JCR INFLOW/FLOW//1DAY/SACTRN_BC_SCRIPT/',
+                      '/CLEAR CREEK/CARR POWERHOUSE/FLOW-RELEASE//1DAY/SACTRN_BC_SCRIPT/',
+                      '/CLEAR CREEK/WHISKEYTOWN LAKE/FLOW-ACC-DEP//1DAY/SACTRN_BC_SCRIPT/']  # this actually evap, but negative already, so it goes as inflow
+    outflow_records = ['/CLEAR CREEK/WHISKEYTOWN LAKE/FLOW-DIVERSION-SPRING-CR//1DAY/SACTRN_BC_SCRIPT/',
+                       '/CLEAR CREEK/WHISKEYTOWN DAM/FLOW-RELEASE//1DAY/SACTRN_BC_SCRIPT/']
+    starting_elevation = DSS_Tools.first_value(forecast_dss,'/CLEAR CREEK/WHISKEYTOWN LAKE/ELEV//1MON/SACTRN_BC_SCRIPT/')
+    print('starting_elevation ',starting_elevation)
+    cbfj.predict_elevation(currentAlternative, rtw, 'Whiskeytown Lake', inflow_records, outflow_records, starting_elevation,
+                         elev_stor_area, forecast_dss, '//Whiskeytown Lake/ELEV-FORECAST//1DAY/AMER_BC_SCRIPT/', forecast_dss, shared_dir,
+                         use_conic=False, alt_period=None, alt_period_string=None, balance_period_str='1Day')
+
+def splice_met(currentAlternative, rtw, forecast_dss, output_dss):
+    # Lewiston is still dependent on using Met data from Redding during Jan-Feb-Mar.  Create those spliced Met data records...
+    pairs = [
+            ["/MR Sac.-Lewiston Res./TCAC1/Temp-Air//1Hour/SACTRN_BC_SCRIPT/",
+             "/MR Sac.-Clear Cr. to Sac R./KRDD/Temp-Air//1Hour/SACTRN_BC_SCRIPT/"],
+            ["/MR Sac.-Lewiston Res./TCAC1/Temp-DewPoint//1Hour/SACTRN_BC_SCRIPT/",
+             "/MR Sac.-Clear Cr. to Sac R./KRDD/Temp-DewPoint//1Hour/SACTRN_BC_SCRIPT/"],
+            ["/MR SAC.-LEWISTON RES./TCAC1/IRRAD-SOLAR//1HOUR/SACTRN_BC_SCRIPT/",
+             "/MR SAC.-CLEAR CR. TO SAC R./RRAC1/IRRAD-SOLAR//1HOUR/SACTRN_BC_SCRIPT/"],
+            ["/MR Sac.-Lewiston Res./TCAC1/Dir-Wind-radians/0/1Hour/SACTRN_BC_SCRIPT/",
+             "/MR Sac.-Clear Cr. to Sac R./KRDD/Dir-Wind//1Hour/SACTRN_BC_SCRIPT/"],  # already in radians
+            ["/MR Sac.-Lewiston Res./TCAC1/Speed-Wind//1Hour/SACTRN_BC_SCRIPT/",
+             "/MR Sac.-Clear Cr. to Sac R./KRDD/Speed-Wind//1Hour/SACTRN_BC_SCRIPT/"],
+            ["/MR Sac.-Trinity River/TCAC1/%-Cloud Cover//1Day/SACTRN_BC_SCRIPT/",
+             "/MR Sac.-Clear Cr. to Sac R./RRAC1/%-Cloud Cover//1Hour/SACTRN_BC_SCRIPT/"],
+            ["/MR Sac.-Trinity River/TCAC1/%-Cloud Cover-FRAC//1Day/SACTRN_BC_SCRIPT/",
+             "/MR Sac.-Clear Cr. to Sac R./RRAC1/%-Cloud Cover-FRAC//1Hour/SACTRN_BC_SCRIPT/"]
+             ]
+    months = [1,2,3] #these are the months we are replacing with pair #2
+    DSS_Tools.replace_data(currentAlternative, rtw, pairs, forecast_dss, output_dss, months, standard_interval='1HOUR')
 
 
 def study_dir_from_run_dir(run_dir):
@@ -198,3 +245,93 @@ def model_dir_from_run_dir(run_dir,model_place,model_name):
     study_dir = study_dir_from_run_dir(run_dir)
     model_dir = os.path.join(study_dir,'cequal-w2',model_place,model_name)
     return model_dir
+
+def forecast_data_preprocess_ResSim_5Res(currentAlternative, computeOptions):
+    dss_file = computeOptions.getDssFilename()
+    rtw = computeOptions.getRunTimeWindow()
+    
+    run_dir = computeOptions.getRunDirectory()
+    project_dir = Project.getCurrentProject().getProjectDirectory()
+    currentAlternative.addComputeMessage('project_dir: ' + project_dir)
+    currentAlternative.addComputeMessage('run dir: ' + run_dir)
+    balance_period = currentAlternative.getTimeStep()
+    shared_dir = os.path.join(project_dir, 'shared')
+
+    forecast_dss = os.path.join(shared_dir,'WTMP_SacTrn_Forecast.dss')
+    DMS_preprocess.fix_DMS_types_units(forecast_dss)
+    
+    # calculate meteorological airtemp lapse for the elevation @ Shasta Lake
+    currentAlternative.addComputeMessage('lapse infile: '+forecast_dss)
+    currentAlternative.addComputeMessage('lapse outfile: '+forecast_dss)
+    DSS_Tools.airtemp_lapse(forecast_dss, "/MR SAC.-CLEAR CR. TO SAC R./KRDD/TEMP-AIR//1HOUR/SACTRN_BC_SCRIPT/",
+                  0.7, forecast_dss, "Shasta_Lapse")
+    
+    splice_met(currentAlternative, rtw, forecast_dss, forecast_dss)
+
+    write_forecast_elevations(currentAlternative, rtw, forecast_dss, shared_dir)
+
+    currentAlternative.addComputeMessage("Computing equilibrium temperature, this may take a while...")
+    # eq_temp(rtw,at,cl,ws,sr,td,eq_temp_out)
+    eq_temp(rtw,
+            [forecast_dss,"/MR Sac.-Clear Cr. to Sac R./KRDD/Temp-Air//1Hour/SACTRN_BC_SCRIPT/"],
+            [forecast_dss,"/MR Sac.-Clear Cr. to Sac R./RRAC1/%-Cloud Cover-FRAC//1Hour/SACTRN_BC_SCRIPT/"],
+            [forecast_dss,"/MR Sac.-Clear Cr. to Sac R./KRDD/Speed-Wind//1Hour/SACTRN_BC_SCRIPT/"],
+            [forecast_dss,"/MR SAC.-CLEAR CR. TO SAC R./RRAC1/IRRAD-SOLAR//1HOUR/SACTRN_BC_SCRIPT/"],
+            [forecast_dss,"/MR Sac.-Clear Cr. to Sac R./KRDD/Temp-DewPoint//1Hour/SACTRN_BC_SCRIPT/"],
+            [forecast_dss,"/MR Sac.-Clear Cr. to Sac R./KRDD/Temp-Equil//1Hour/sactrn_bc_script/"]
+           )
+
+    DSS_Tools.create_constant_dss_rec(currentAlternative, rtw, forecast_dss, constant=0.001, what='flow', 
+                        dss_type='PER-AVER', period='1DAY',cpart='TinyFlow',fpart='TinyFlow')
+    DSS_Tools.create_constant_dss_rec(currentAlternative, rtw, forecast_dss, constant=0.001, what='flow', 
+                        dss_type='PER-AVER', period='1HOUR',cpart='TinyFlow',fpart='TinyFlow')
+    DSS_Tools.create_constant_dss_rec(currentAlternative, rtw, forecast_dss, constant=10.0, what='temp-water', 
+                        dss_type='PER-AVER', period='1DAY',cpart='TENS',fpart='TENS')
+    DSS_Tools.create_constant_dss_rec(currentAlternative, rtw, forecast_dss, constant=0.0, what='flow', 
+                        dss_type='PER-AVER', period='1DAY',cpart='ZEROS',fpart='ZEROS')
+    DSS_Tools.create_constant_dss_rec(currentAlternative, rtw, forecast_dss, constant=0.0, what='flow', 
+                        dss_type='PER-AVER', period='1HOUR',cpart='ZEROS',fpart='ZEROS')   
+    DSS_Tools.create_constant_dss_rec(currentAlternative, rtw, forecast_dss, constant=0, what='gate', 
+                        dss_type='INST-VAL', period='1HOUR',cpart='ZEROS',fpart='ZEROS')
+    DSS_Tools.create_constant_dss_rec(currentAlternative, rtw, forecast_dss, constant=1, what='gate', 
+                        dss_type='INST-VAL', period='1HOUR',cpart='ONES',fpart='ONES')
+
+	# TODO: Perhaps generate tributary flows/temps based on exceedence and/or temp regressions?
+
+    # TODO: Generate Flow records needed for plotting
+    return True
+
+def forecast_data_preprocess_W2_5Res(currentAlternative, computeOptions):
+    dss_file = computeOptions.getDssFilename()
+    rtw = computeOptions.getRunTimeWindow()
+    
+    run_dir = computeOptions.getRunDirectory()
+    project_dir = Project.getCurrentProject().getProjectDirectory()
+    currentAlternative.addComputeMessage('project_dir: ' + project_dir)
+    currentAlternative.addComputeMessage('run dir: ' + run_dir)
+    balance_period = currentAlternative.getTimeStep()
+    shared_dir = os.path.join(project_dir, 'shared')
+
+    # output file says ResSim, because I don't want to change all the linking.
+    forecast_dss = os.path.join(shared_dir,'WTMP_SacTrn_Forecast.dss')
+    DMS_preprocess.fix_DMS_types_units(forecast_dss)
+    
+    splice_met(currentAlternative, rtw, forecast_dss, forecast_dss)
+
+    write_forecast_elevations(currentAlternative, rtw, forecast_dss, shared_dir)
+
+    DSS_Tools.create_constant_dss_rec(currentAlternative, rtw, forecast_dss, constant=0.001, what='flow', 
+                        dss_type='PER-AVER', period='1DAY',cpart='TinyFlow',fpart='TinyFlow')
+    DSS_Tools.create_constant_dss_rec(currentAlternative, rtw, forecast_dss, constant=0.001, what='flow', 
+                        dss_type='PER-AVER', period='1HOUR',cpart='TinyFlow',fpart='TinyFlow')
+    DSS_Tools.create_constant_dss_rec(currentAlternative, rtw, forecast_dss, constant=10.0, what='temp-water', 
+                        dss_type='PER-AVER', period='1DAY',cpart='TENS',fpart='TENS')
+    DSS_Tools.create_constant_dss_rec(currentAlternative, rtw, forecast_dss, constant=0.0, what='flow', 
+                        dss_type='PER-AVER', period='1DAY',cpart='ZEROS',fpart='ZEROS')
+    DSS_Tools.create_constant_dss_rec(currentAlternative, rtw, forecast_dss, constant=0.0, what='flow', 
+                        dss_type='PER-AVER', period='1HOUR',cpart='ZEROS',fpart='ZEROS')
+    DSS_Tools.create_constant_dss_rec(currentAlternative, rtw, forecast_dss, constant=13.0, what='temp-water', 
+                        dss_type='PER-AVER', period='1DAY',cpart='WHI-target-13',fpart='WHI-target-13')
+
+    # TODO: Generate Flow records needed for plotting
+    return True
