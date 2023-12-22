@@ -1,6 +1,6 @@
 '''
 Created on 8/7/2023
-@author: Scott Burdick-Yahya
+@author: Scott Burdick-Yahya, Ben Saenz
 @organization: Resource Management Associates
 @contact: scott@rmanet.com
 @note:
@@ -38,8 +38,12 @@ def computeAlternative(currentAlternative, computeOptions):
 
     sdf.resample_dss_ts(DMS_hydro_dss_file,'/MR Sac.-Shasta Lake/Sacramento R. a Delta-Flow/Flow//1Day/230.9.125.1.1/',rtw,output_dss_file,'1HOUR')
     sdf.resample_dss_ts(DMS_hydro_dss_file,'/MR Sac.-Shasta Lake/McCloud River-Flow/Flow//1Day/230.8.125.1.1/',rtw,output_dss_file,'1HOUR')
+	# Pit river is recorded at GMT midnight, and so when requesting the run time windows from DSS, the last day is left off the record.
+	# This generates some bad value in the balance flow, which hopefully we catch and make zero, and which hopefully don't effect the run much
+	# because it's only the last day.
     sdf.resample_dss_ts(DMS_hydro_dss_file,'/MR Sac.-Shasta Lake/Pit R. Branch-Flow/Flow//1Day/230.6.125.1.1/',rtw,output_dss_file,'1HOUR')
     sdf.resample_dss_ts(DMS_hydro_dss_file,'/MR SAC.-SHASTA LAKE/SULANHARAS CREEK-FLOW/Flow//1Day/230.7.125.1.1/',rtw,output_dss_file,'1HOUR')
+        
 
     inflow_records = ['::'.join([output_dss_file,'/MR Sac.-Shasta Lake/McCloud River-Flow/Flow//1Hour/230.8.125.1.1/']),
                       '::'.join([output_dss_file,'/MR Sac.-Shasta Lake/McCloud River-Flow/Flow//1Hour/230.8.125.1.1/']),
@@ -170,7 +174,7 @@ def computeAlternative(currentAlternative, computeOptions):
     sdf.resample_dss_ts(DMS_hydro_dss_file,'/MR Sac.-Trinity Lake/Stuart Fork-Inflow/Flow//1Day/231.8.125.1.1/',rtw,output_dss_file,'1HOUR')
     sdf.resample_dss_ts(DMS_hydro_dss_file,'/MR Sac.-Trinity Lake/Swift Creek-Inflow/Flow//1Day/231.9.125.1.1/',rtw,output_dss_file,'1HOUR')
     sdf.resample_dss_ts(DMS_hydro_dss_file,'/MR Sac.-Trinity Lake/Trinity River-Inflow/Flow//1Day/231.6.125.1.1/',rtw,output_dss_file,'1HOUR')
-
+        
     inflow_records = ['::'.join([output_dss_file,'/MR Sac.-Trinity Lake/EF Trinity River-Inflow/Flow//1Hour/231.7.125.1.1/']),
                       '::'.join([output_dss_file,'/MR Sac.-Trinity Lake/Stuart Fork-Inflow/Flow//1Hour/231.8.125.1.1/']),
                       '::'.join([output_dss_file,'/MR Sac.-Trinity Lake/Swift Creek-Inflow/Flow//1Hour/231.9.125.1.1/']),
@@ -260,3 +264,68 @@ def computeAlternative(currentAlternative, computeOptions):
     # Sacramento River at Bend Bridge
 
     return True
+
+
+def compute_W2_forecast_balance(currentAlternative, computeOptions):
+    currentAlternative.addComputeMessage("Computing ScriptingAlternative:" + currentAlternative.getName())
+    currentAlternative.addComputeMessage('\n')
+    dss_file = computeOptions.getDssFilename()
+    rtw = computeOptions.getRunTimeWindow()
+
+    # Shasta Inputs **********************************************************************
+    # ******* Use same time resolution as ResSim hydro model time step ************
+    # Flows are assumed to be period averaged
+    # Evap assumed to be period accumulated length (e.g., ft)
+    # Stage assumed to be instantaneous values
+    
+    run_dir = computeOptions.getRunDirectory()
+    project_dir = Project.getCurrentProject().getProjectDirectory()
+    currentAlternative.addComputeMessage('project_dir: ' + project_dir)
+    currentAlternative.addComputeMessage('run dir: ' + run_dir)
+    balance_period_str = currentAlternative.getTimeStep()
+    shared_dir = os.path.join(project_dir, 'shared')
+
+    output_dss_file = os.path.join(shared_dir,'WTMP_SacTrn_Forecast.dss')
+
+    # Lewiston Inputs **********************************************************************
+    # ******* Use same time resolution as ResSim hydro model time step ************
+    # Flows are assumed to be period averaged
+    # Evap assumed to be period accumulated length (e.g., ft)
+    # Stage assumed to be instantaneous values
+
+    inflow_records = ['/MR Sac.-Trinity Lake/TRN-Generation Release/Flow//1Hour/231.5.125.2.1/',
+                      '/MR Sac.-Trinity Lake/TRN-Outlet Release G1/Flow//1Hour/231.5.125.7.1/',
+                      '/MR Sac.-Trinity Lake/TRN-Outlet Release G2/Flow//1Hour/231.5.125.8.1/',
+                      '/MR Sac.-Trinity Lake/TRN-Outlet Release G3/Flow//1Hour/231.5.125.9.1/',
+                      '/MR Sac.-Trinity Lake/TRN-Spill Release/Flow//1Hour/231.5.125.3.1/']
+
+    outflow_records = ['/MR Sac.-Whiskeytown Lake/JCR-Generation Release/Flow//1Hour/233.13.125.1.1/', #lewiston  CC diversion tunnel: Clear Creek Transfer operation
+                       '/MR Sac.-Lewiston Res./LEW-Fish Hatchery Release/Flow//1Hour/232.12.125.1.1/',
+                       '/MR Sac.-Lewiston Res./LEW-Generation Release Hrly/Flow//1Hour/232.12.125.3.1/',
+                       '/MR Sac.-Lewiston Res./LEW-Outlet Release Hrly/Flow//1Hour/232.12.125.2.1/',
+                       '/MR Sac.-Lewiston Res./LEW-Spill Release Hrly/Flow//1Hour/232.12.125.5.1/', #Lewiston Res. Dam at Trinity River - Powerhouse
+                       ]
+
+    stage_record = '/MR Sac.-Lewiston Res./LEW-Reservoir Elevation Hrly/Elev//1Hour/232.12.145.1.1/'
+    evap_record = '::'.join([output_dss_file,'//ZEROS/FLOW//1HOUR/ZEROS/'])
+
+    elev_stor_area = cbfj.read_elev_storage_area_file(os.path.join(shared_dir, 'AMR_scratch_lewiston.csv'), 'lewiston') #TODO: check this
+
+    use_conic = False
+    write_evap = False
+    write_storage = False
+
+    evap_dss_record_name = "/LEWISTON RESERVOIR/EVAP FLOW/FLOW//1HOUR/DERIVED/"
+    storage_dss_record_name = "/LEWISTON RESERVOIR/STORAGE/FLOW//1HOUR/DERIVED/"
+    output_dss_record_name = "/LEWISTON RESERVOIR/BALANCE FLOW/FLOW//1HOUR/DERIVED/"
+    if use_conic:
+        output_dss_record_name = "/LEWISTON RESERVOIR/BALANCE FLOW/FLOW//1HOUR/DERIVED-CONIC INTERP/"
+        if 'ZEROS' in evap_record:
+            output_dss_record_name = "/LEWISTON RESERVOIR/BALANCE FLOW/FLOW//1HOUR/DERIVED-CONIC INTERP NO EVAP/"
+
+    cbfj.create_balance_flows(currentAlternative, rtw, 'LEWISTON', inflow_records, outflow_records, stage_record, evap_record,
+                                elev_stor_area, DMS_hydro_dss_file, output_dss_record_name, output_dss_file, shared_dir,
+                                evap_dss_record_name=evap_dss_record_name, storage_dss_record_name=storage_dss_record_name,
+                                balance_period_str=balance_period_str, use_conic=use_conic, write_evap=write_evap, write_storage=write_storage,
+                                alt_period=60*6, alt_period_string='6Hour')
+

@@ -333,5 +333,8 @@ def forecast_data_preprocess_W2_5Res(currentAlternative, computeOptions):
     DSS_Tools.create_constant_dss_rec(currentAlternative, rtw, forecast_dss, constant=13.0, what='temp-water', 
                         dss_type='PER-AVER', period='1DAY',cpart='WHI-target-13',fpart='WHI-target-13')
 
+    # Keswick need daily record.
+    DSS_Tools.resample_dss_ts(forecast_dss,'/SACRAMENTO RIVER/SHASTA LAKE/FLOW-KESWICK-CFS//1MON/SACTRN_BC_SCRIPT/',rtw,forecast_dss,'1DAY')
+
     # TODO: Generate Flow records needed for plotting
     return True
