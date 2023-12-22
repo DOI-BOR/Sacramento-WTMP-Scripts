@@ -27,7 +27,7 @@ reload(Acc_Dep_ResSim_SacTrn)
 import DSS_Tools
 reload(DSS_Tools)
 
-units_need_fixing = ['tenths','m/s','deg','kph'] #'radians',]
+units_need_fixing = ['tenths','deg','kph'] #'radians',]
 
 def fix_DMS_types_units(dss_file):
     '''This method was implemented to change data types to PER-AVER that are not coming from the DMS that way'''
@@ -80,13 +80,13 @@ def fix_DMS_types_units(dss_file):
                 dss.write(tsc)
 
                 # also, add w2link
-                rec_parts = tsc.fullName.split('/')
-                if not "w2link" in rec_parts[3].lower():
-                    rec_parts[3] += '-W2link'
-                    tsc.fullName = '/'.join(rec_parts)
-                    for i in range(len(tsc.values)) :
-                        tsc.values[i] = tsc.values[i] / 3.6
-                    dss.write(tsc)
+                #rec_parts = tsc.fullName.split('/')
+                #if not "w2link" in rec_parts[3].lower():
+                #    rec_parts[3] += '-W2link'
+                #    tsc.fullName = '/'.join(rec_parts)
+                #    for i in range(len(tsc.values)) :
+                #        tsc.values[i] = tsc.values[i] / 3.6
+                #    dss.write(tsc)
  
             if tsm.getUnits() == 'm/s':
                 # make a copy divied by kph conversion as a hack to get W2 linking the wind speed correctly 
@@ -98,54 +98,6 @@ def fix_DMS_types_units(dss_file):
                     for i in range(len(tsc.values)) :
                         tsc.values[i] = tsc.values[i] / 3.6
                     dss.write(tsc)
-    dss.close()
-
-def airtemp_lapse(dss_file,dss_rec,lapse_in_C,dss_outfile,f_part):
-    dss = HecDss.open(dss_file)
-    tsm = dss.read(dss_rec)
-    lapse = lapse_in_C
-    if 'f' in tsm.getUnits().lower():
-        lapse = lapse*9.0/5.0+32.0
-    tsm = tsm.add(lapse)
-    tsc = tsm.getData()
-    dss.close()
-
-    pathparts = dss_rec.split('/')
-    pathparts[-2] = f_part
-    tsc.fullName = '/'.join(pathparts)
-    dss_out = HecDss.open(dss_outfile)
-    dss_out.write(tsc)
-    dss_out.close()
-
-def calculate_relative_humidity(air_temp, dewpoint_temp):
-    """
-    Calculate Relative Humidity given the air temperature and dewpoint temperature - August-Roche-Magnus approximation
-    
-    :param air_temp: Air Temperature in degrees Celsius
-    :param dewpoint_temp: Dew Point Temperature in degrees Celsius
-    :return: Relative Humidity in percentage
-    """
-    numerator = (112.0 - 0.1 * dewpoint_temp + air_temp)
-    denominator = (112.0 + 0.9 * air_temp)
-    exponent = ((17.62 * dewpoint_temp) / (243.12 + dewpoint_temp)) - ((17.62 * air_temp) / (243.12 + air_temp))
-    relative_humidity = 100.0 * (numerator / denominator) * math.exp(exponent)	
-    return max(0.01,min(100.0,relative_humidity))
-
-def relhum_from_at_dp(met_dss_file,at_path,dp_path):
-    dss = HecDss.open(met_dss_file)
-    tsc = dss.read(at_path).getData()
-    dp_data = DSS_Tools.data_from_dss(met_dss_file,dp_path,None,None)
-    for i in range(tsc.numberValues):
-        tsc.values[i] = calculate_relative_humidity(tsc.values[i],dp_data[i])
-    parts = tsc.fullName.split('/')
-    parts[2] = parts[2][:5]
-    parts[3] = 'RELHUM-FROM-AT-DP'
-    parts[6] = parts[6]+'-DERIVED'
-    new_pathname = '/'.join(parts)
-    tsc.fullName = new_pathname
-    tsc.units = '%'
-    print('writing: ',new_pathname)
-    dss.write(tsc)
     dss.close()
 
 
@@ -309,13 +261,13 @@ def preprocess_ResSim_5Res(currentAlternative, computeOptions):
     # calculate meteorological airtemp lapse for the elevation @ Shasta Lake
     currentAlternative.addComputeMessage('lapse infile: '+met_dss_file)
     currentAlternative.addComputeMessage('lapse outfile: '+output_dss_file)
-    airtemp_lapse(met_dss_file, "/MR SAC.-CLEAR CR. TO SAC R./KRDD-AIR TEMPERATURE/TEMP-AIR//1HOUR/235.40.53.1.1/",
+    DSS_Tools.airtemp_lapse(met_dss_file, "/MR SAC.-CLEAR CR. TO SAC R./KRDD-AIR TEMPERATURE/TEMP-AIR//1HOUR/235.40.53.1.1/",
                   -0.7, output_dss_file, "Shasta_Lapse")
 
-    relhum_from_at_dp(met_dss_file,
+    DSS_Tools.relhum_from_at_dp(met_dss_file,
 	                  "/MR Sac.-Clear Cr. to Sac R./KRDD-Air temperature/Temp-Air//1Hour/235.40.53.1.1/",
 	                  "/MR Sac.-Clear Cr. to Sac R./KRDD-Dew Point/Temp-DewPoint//1Hour/235.40.51.1.1/")
-    relhum_from_at_dp(met_dss_file,
+    DSS_Tools.relhum_from_at_dp(met_dss_file,
 	                  "/MR Sac.-Lewiston Res./TCAC1 - Calc Data-Air temperature/Temp-Air//1Hour/232.6.53.1.1/",
 	                  "/MR Sac.-Lewiston Res./TCAC1 - Calc Data-Dew Point/Temp-DewPoint//1Hour/232.6.51.1.1/")
 
