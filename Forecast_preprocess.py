@@ -296,6 +296,10 @@ def forecast_data_preprocess_ResSim_5Res(currentAlternative, computeOptions):
     DSS_Tools.create_constant_dss_rec(currentAlternative, rtw, forecast_dss, constant=1, what='gate', 
                         dss_type='INST-VAL', period='1HOUR',cpart='ONES',fpart='ONES')
 
+    DSS_Tools.relhum_from_at_dp(forecast_dss,
+	                  "/MR SAC.-CLEAR CR. TO SAC R./KRDD/TEMP-AIR//1HOUR/sactrn_bc_script/",
+	                  "/MR SAC.-CLEAR CR. TO SAC R./KRDD/TEMP-DEWPOINT//1HOUR/sactrn_bc_script/")
+
 	# TODO: Perhaps generate tributary flows/temps based on exceedence and/or temp regressions?
 
     # TODO: Generate Flow records needed for plotting

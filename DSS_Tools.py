@@ -10,7 +10,7 @@ from hec.hecmath import HecMathException
 from hec.heclib.util.Heclib import UNDEFINED_DOUBLE
 import hec.hecmath.TimeSeriesMath as tsmath
 from com.rma.model import Project
-import os,shutil,copy,sys
+import os,shutil,copy,sys,math
 from java.util import Vector, Date
 
 import datetime
@@ -516,7 +516,7 @@ def calculate_relative_humidity(air_temp, dewpoint_temp):
 def relhum_from_at_dp(met_dss_file, at_path, dp_path):
     dss = HecDss.open(met_dss_file)
     tsc = dss.read(at_path).getData()
-    dp_data = DSS_Tools.data_from_dss(met_dss_file, dp_path, None, None)
+    dp_data = data_from_dss(met_dss_file, dp_path, None, None)
     for i in range(tsc.numberValues):
         tsc.values[i] = calculate_relative_humidity(tsc.values[i], dp_data[i])
     parts = tsc.fullName.split('/')
@@ -609,3 +609,20 @@ def replace_data(currentAlt, timewindow, pairs, dss_file, dss_outfile, months, s
 
         dssFm.close()
         dssFmOut.close()
+
+def airtemp_lapse(dss_file,dss_rec,lapse_in_C,dss_outfile,f_part):
+    dss = HecDss.open(dss_file)
+    tsm = dss.read(dss_rec)
+    lapse = lapse_in_C
+    if 'f' in tsm.getUnits().lower():
+        lapse = lapse*9.0/5.0+32.0
+    tsm = tsm.add(lapse)
+    tsc = tsm.getData()
+    dss.close()
+
+    pathparts = dss_rec.split('/')
+    pathparts[-2] = f_part
+    tsc.fullName = '/'.join(pathparts)
+    dss_out = HecDss.open(dss_outfile)
+    dss_out.write(tsc)
+    dss_out.close()
