@@ -483,8 +483,16 @@ def create_balance_flows(currentAlt, timewindow, res_name, inflow_records, outfl
 
 	# sometimes ResSim does not include the start record in period average simulations, so if one flow or elevation data
 	# record is missing, the calc can sometimes go way off.  Constrain to realistic values, set invalid to zero.
-    if flow_resid[0] > 300000.0 or flow_resid[0] < -300000.0:
-        flow_resid[0] = 0.0
+	# also, recs offset by timezone and/or daily records not at midnight can introduced bad values on the first or last days.
+	# So, filter at least the first 24 hours, last 24 hours
+    check_steps = 1
+    bad_flow_bound = 1.e7
+    if balance_period_str.lower() == '1hour':
+        check_steps = 24
+    for i in range(check_steps):
+        for idx in [i,-1-i]:
+            if math.isnan(flow_resid[idx]) or flow_resid[idx] > bad_flow_bound or flow_resid[idx] < -bad_flow_bound:
+                flow_resid[idx] = 0.0
 
     steptime = times[1]-times[0]
     tsc = TimeSeriesContainer()

@@ -81,8 +81,10 @@ def computeAlternative(currentAlternative, computeOptions):
 
 	DMS_preprocess.preprocess_W2_5Res(currentAlternative, computeOptions)
 
-	# remove me most of the time
-	backdate_W2_files_to_skip_compute(run_dir)
+    #acc_dep = Acc_Dep_ResSim_SacTrn.computeAlternative(currentAlternative, computeOptions)
+
+    # remove me most of the time
+    backdate_W2_files_to_skip_compute(run_dir)
     
     return True
 

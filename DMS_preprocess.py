@@ -261,8 +261,8 @@ def preprocess_W2_5Res(currentAlternative, computeOptions):
     compute_5Res_outflows(currentAlternative, rtw, hydro_dss, output_dss_file)
 
 	# link these flows for W2, to avoid zero-dam-flow situations - needs to be above 2.0 cfs for the flowweightaverage script to recognize it :/
-    DSS_Tools.min_ts(output_dss_file, '/MR Sac.-Trinity Lake/TRN-GenerationG1G2_Sum/Flow//1Hour/ResSim_PreProcess/', 2.0, output_dss_file, 'min_flow')
-    DSS_Tools.min_ts(output_dss_file, '/MR Sac.-Lewiston Res./LEW-Gen_plus_Outlet Release/Flow//1Hour/ResSim_PreProcess/', 2.0, output_dss_file, 'min_flow')
+    DSS_Tools.min_ts(output_dss_file, '/MR Sac.-Trinity Lake/TRN-GenerationG1G2_Sum/Flow//1Hour/ResSim_PreProcess/', 1.1, output_dss_file, 'min_flow')
+    DSS_Tools.min_ts(output_dss_file, '/MR Sac.-Lewiston Res./LEW-Gen_plus_Outlet Release/Flow//1Hour/ResSim_PreProcess/', 1.1, output_dss_file, 'min_flow')
 
 
 def preprocess_ResSim_5Res(currentAlternative, computeOptions):
