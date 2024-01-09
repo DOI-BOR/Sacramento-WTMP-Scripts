@@ -34,70 +34,73 @@ def fix_DMS_types_units(dss_file):
     dss = HecDss.open(dss_file)
     recs = dss.getPathnameList()
     for r in recs:
-        tsm = dss.read(r)
         rlow = r.lower()
-        if "/flow" in rlow or "/1day/" in rlow:
-            tsm.setType('PER-AVER')
-            dss.write(tsm)
+        if not '/location info' in rlow:
         
-        if tsm.getUnits() in units_need_fixing:
-            if tsm.getUnits() == 'tenths':
-                # save off a copy of cloud record in 0-1 for ResSim
-                tsc = tsm.getData()
-                rec_parts = tsc.fullName.split('/')
-                rec_parts[3] += '-FRAC'
-                tsc.fullName = '/'.join(rec_parts)
-                tsc.units = 'FRAC'
-                for i in range(len(tsc.values)) :
-                    tsc.values[i] = tsc.values[i] / 10.0                
-                dss.write(tsc)
-            if tsm.getUnits() == 'radians':
-                # save off a copy in deg
-                tsc = tsm.getData()
-                rec_parts = tsc.fullName.split('/')
-                rec_parts[3] += '-DEG'
-                tsc.fullName = '/'.join(rec_parts)
-                tsc.units = 'deg'
-                for i in range(len(tsc.values)) :
-                    tsc.values[i] = tsc.values[i] / (2*3.141592653589793) * 360.0                
-                dss.write(tsc)
-            if tsm.getUnits() == 'deg':
-                # save off a copy in redians
-                tsc = tsm.getData()
-                rec_parts = tsc.fullName.split('/')
-                rec_parts[3] += '-RADIANS'
-                tsc.fullName = '/'.join(rec_parts)
-                tsc.units = 'radians'
-                for i in range(len(tsc.values)) :
-                    tsc.values[i] = tsc.values[i] / 360.0 * (2*3.141592653589793)                
-                dss.write(tsc)
-            if tsm.getUnits() == 'kph':
-                # convert to m/s 
-                tsc = tsm.getData()
-                tsc.units = 'm/s'
-                for i in range(len(tsc.values)) :
-                    tsc.values[i] = tsc.values[i] / 3.6
-                dss.write(tsc)
+            tsm = dss.read(r)
 
-                # also, add w2link
-                #rec_parts = tsc.fullName.split('/')
-                #if not "w2link" in rec_parts[3].lower():
-                #    rec_parts[3] += '-W2link'
-                #    tsc.fullName = '/'.join(rec_parts)
-                #    for i in range(len(tsc.values)) :
-                #        tsc.values[i] = tsc.values[i] / 3.6
-                #    dss.write(tsc)
- 
-            if tsm.getUnits() == 'm/s':
-                # make a copy divied by kph conversion as a hack to get W2 linking the wind speed correctly 
-                tsc = tsm.getData()
-                rec_parts = tsc.fullName.split('/')
-                if not "w2link" in rec_parts[3].lower():
-                    rec_parts[3] += '-W2link'
+            if "/flow" in rlow or "/1day/" in rlow:
+                tsm.setType('PER-AVER')
+                dss.write(tsm)
+            
+            if tsm.getUnits() in units_need_fixing:
+                if tsm.getUnits() == 'tenths':
+                    # save off a copy of cloud record in 0-1 for ResSim
+                    tsc = tsm.getData()
+                    rec_parts = tsc.fullName.split('/')
+                    rec_parts[3] += '-FRAC'
                     tsc.fullName = '/'.join(rec_parts)
+                    tsc.units = 'FRAC'
+                    for i in range(len(tsc.values)) :
+                        tsc.values[i] = tsc.values[i] / 10.0                
+                    dss.write(tsc)
+                if tsm.getUnits() == 'radians':
+                    # save off a copy in deg
+                    tsc = tsm.getData()
+                    rec_parts = tsc.fullName.split('/')
+                    rec_parts[3] += '-DEG'
+                    tsc.fullName = '/'.join(rec_parts)
+                    tsc.units = 'deg'
+                    for i in range(len(tsc.values)) :
+                        tsc.values[i] = tsc.values[i] / (2*3.141592653589793) * 360.0                
+                    dss.write(tsc)
+                if tsm.getUnits() == 'deg':
+                    # save off a copy in redians
+                    tsc = tsm.getData()
+                    rec_parts = tsc.fullName.split('/')
+                    rec_parts[3] += '-RADIANS'
+                    tsc.fullName = '/'.join(rec_parts)
+                    tsc.units = 'radians'
+                    for i in range(len(tsc.values)) :
+                        tsc.values[i] = tsc.values[i] / 360.0 * (2*3.141592653589793)                
+                    dss.write(tsc)
+                if tsm.getUnits() == 'kph':
+                    # convert to m/s 
+                    tsc = tsm.getData()
+                    tsc.units = 'm/s'
                     for i in range(len(tsc.values)) :
                         tsc.values[i] = tsc.values[i] / 3.6
                     dss.write(tsc)
+
+                    # also, add w2link
+                    #rec_parts = tsc.fullName.split('/')
+                    #if not "w2link" in rec_parts[3].lower():
+                    #    rec_parts[3] += '-W2link'
+                    #    tsc.fullName = '/'.join(rec_parts)
+                    #    for i in range(len(tsc.values)) :
+                    #        tsc.values[i] = tsc.values[i] / 3.6
+                    #    dss.write(tsc)
+
+                if tsm.getUnits() == 'm/s':
+                    # make a copy divied by kph conversion as a hack to get W2 linking the wind speed correctly 
+                    tsc = tsm.getData()
+                    rec_parts = tsc.fullName.split('/')
+                    if not "w2link" in rec_parts[3].lower():
+                        rec_parts[3] += '-W2link'
+                        tsc.fullName = '/'.join(rec_parts)
+                        for i in range(len(tsc.values)) :
+                            tsc.values[i] = tsc.values[i] / 3.6
+                        dss.write(tsc)
     dss.close()
 
 
@@ -118,8 +121,8 @@ def splice_lewiston_met_data(currentAlternative, rtw, met_dss_file, output_dss_f
              "/MR SAC.-CLEAR CR. TO SAC R./RRAC1-SOLAR RADIATION/IRRAD-SOLAR//1HOUR/235.41.135.1.1/"],
             ["/MR Sac.-Lewiston Res./TCAC1-Wind Direction/Dir-Wind-RADIANS/0/1Hour/232.5.133.1.2/",
              "/MR Sac.-Clear Cr. to Sac R./KRDD-Wind Direction/Dir-Wind//1Hour/235.40.133.1.2/"],
-            ["/MR Sac.-Lewiston Res./TCAC1-Wind Speed/Speed-Wind-W2link//1Hour/232.5.133.1.1/",
-             "/MR Sac.-Clear Cr. to Sac R./KRDD-Wind Speed/Speed-Wind-W2link//1Hour/235.40.133.1.1/"],
+            ["/MR Sac.-Lewiston Res./TCAC1-Wind Speed/Speed-Wind//1Hour/232.5.133.1.1/",
+             "/MR Sac.-Clear Cr. to Sac R./KRDD-Wind Speed/Speed-Wind//1Hour/235.40.133.1.1/"],
             ["/MR Sac.-Trinity River/TCAC1 - Calc Data-Cloud Cover/%-Cloud Cover//1Day/236.9.129.1.1/",
              "/MR Sac.-Clear Cr. to Sac R./RRAC1-Cloud Cover/%-Cloud Cover//1Hour/235.41.129.1.1/"],
             ["/MR Sac.-Trinity River/TCAC1 - Calc Data-Cloud Cover/%-Cloud Cover-FRAC//1Day/236.9.129.1.1/",
