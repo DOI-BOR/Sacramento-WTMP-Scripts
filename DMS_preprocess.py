@@ -35,7 +35,7 @@ def fix_DMS_types_units(dss_file):
     recs = dss.getPathnameList()
     for r in recs:
         rlow = r.lower()
-        if not '/location info' in rlow:
+        if not '/location info' in rlow and not '/temp-equil' in rlow:
         
             tsm = dss.read(r)
 
