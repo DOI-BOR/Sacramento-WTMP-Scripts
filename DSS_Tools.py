@@ -43,6 +43,93 @@ def standardize_interval(tsm, interval, makePerAver=True):
         return tsm
 
 
+def get_sanitized_record_list(dss_file_path):
+    '''The DSS library seems to return lists of paths with dates in them (getPathnameList()), and some of those
+    dates don't even exist in the file or cannot be read and throw an error.  As of Jan 2024,
+    this is an orregular problem, and the manual soluation is throwing away the DSS file but
+    in many cases that is problematic. So, here we filter dates and check for duplicates.'''
+    dss = HecDss.open(dss_file_path)
+    recs = dss.getPathnameList()
+    dss.close()
+    sanitized_recs = []
+    for r in recs:
+        rec_tokens = r.split('/')
+        rec_tokens[4] = ''  # erase date string, if it exists
+        r_sanitized = '/'.join(rec_tokens)
+        if not r_sanitized in sanitized_recs:
+            sanitized_recs.append(r_sanitized)
+    return sanitized_recs  
+
+def hectimes_from_tsm(tsm):
+    times = tsm.getContainer().times
+    htimes = []
+    for i in range(tsm.getContainer().numberValues):
+        htimes.append(HecTime())
+        htimes[-1].set(times[i])
+    return htimes
+
+def hectimes_from_tsc(tsc):
+    htimes = []
+    for i in range(tsc.numberValues):
+        htimes.append(HecTime())
+        htimes[-1].set(tsc.times[i])
+    return htimes
+
+
+def shift_pit_river_time(input_dss_file,dss_rec,output_dss_file,out_rec,start_date=None,end_date=None):
+
+    tsm_pit = dss_read_ts_safe(input_dss_file,dss_rec,start_date=start_date,end_date=end_date,returnTSM=True)
+
+    tsm_pit = tsm_pit.shiftInTime("-12Hour")
+    tsc_pit = tsm_pit.getData()
+    tsc_pit.fullName = out_rec
+
+    dss_out = HecDss.open(output_dss_file)
+    dss_out.put(tsc_pit)
+    dss_out.close()
+    
+
+def dss_read_ts_safe(dssFilePath,dssRec,start_date=None,end_date=None,returnTSM=False,
+                     returnPydatetimes=False,debug=False):
+    '''A read function that is date-flexible, and ensures the whole time range is returned if dates
+    are None.'''
+
+    # this method is going to throw an error if the file doesn't exist
+    dss = HecDss.open(dssFilePath,True)
+
+    # recordExists() seems to check for the individual database "pages" or something, with a date, or
+    # date range, required?  TODO: figure out how to check if a date-agnostic record exists.  Or, don't,
+    # since HECLIB produces a pretty nice error if you try to open a non-existant record.
+    #if not dss.recordExists(dssRec):
+    #    print('DSS rec does not exist for reading:')
+    #    print('File: '+dssFilePath)
+    #    print('Rec: '+dssRec)
+    #    sys.exit(-1)
+    #else:
+    if start_date is None and end_date is None:
+        tsc = dss.get(dssRec,True) # use get with True here to capture entire record, 'read' seems to leave off data randomly
+        dss.close()
+        if debug:
+            print('Reading DSS in script...')
+            print('    file: '+dssFilePath)
+            print('    record: '+dssRec)
+        if returnTSM:
+            return tsmath(tsc)
+        else:
+            return tsc
+    elif start_date is not None and end_date is not None:
+        tsm = dss.read(dssRec,start_date,end_date,False) # 'read' allows time windows in call, but returns tsm
+        dss.close()
+        if debug:
+            print('Reading DSS in script between '+start_date+' and ',+end_date)
+            print('    file: '+dssFilePath)
+            print('    record: '+dssRec)
+        if returnTSM:
+            return tsm
+        else:
+            return tsm.getData()
+
+
 def data_from_dss(dss_file,dss_rec,starttime_str, endtime_str):
     dssFm = HecDss.open(dss_file)
     if starttime_str is None and endtime_str is None:
@@ -312,12 +399,11 @@ def add_flows(currentAlt, timewindow, inflow_records, dss_file, output_dss_recor
 
 
 def add_or_subtract_flows(currentAlt, timewindow, inflow_records, dss_file, operation,
-                       output_dss_record_name, output_dss_file):
+                       output_dss_record_name, output_dss_file, what="flow"):
     # operation: list where True = add, False = subtract, e.g. [True,False,True] to substract the 2nd
-    # record from the sun of the first and third records
-     
-    #cfs_2_acreft = balance_period * 3600. / 43559.9
-    #acreft_2_cfs = 1. / cfs_2_acreft
+    # record from the sum of the first and third records
+    # what == "flow": assume flows and rectify units
+    # what == anything else: use what as units, and don't convert anything
 
     starttime_str = timewindow.getStartTimeString()
     endtime_str = timewindow.getEndTimeString()
@@ -346,7 +432,7 @@ def add_or_subtract_flows(currentAlt, timewindow, inflow_records, dss_file, oper
                 ts = dssFm_alt.read(inflow_rec_alt, starttime_str, endtime_str, False)
                 dssFm_alt.close()
                 print(dss_file_alt)
-            else:            	
+            else:                
                 ts = dssFm.read(pathname, starttime_str, endtime_str, False)                
                 print(dss_file)
             ts_data = ts.getData()
@@ -373,12 +459,13 @@ def add_or_subtract_flows(currentAlt, timewindow, inflow_records, dss_file, oper
             currentAlt.addComputeMessage('ERROR reading' + str(pathname))
             sys.exit(-1)
 
-        if units.lower() == 'cms':
-            currentAlt.addComputeMessage('Converting cms to cfs')
-            convvals = []
-            for flow in values:
-                convvals.append(flow * 35.314666213)
-            values = convvals
+        if what=="flow":
+            if units.lower() == 'cms':
+                currentAlt.addComputeMessage('Converting cms to cfs')
+                convvals = []
+                for flow in values:
+                    convvals.append(flow * 35.314666213)
+                values = convvals
 
         if len(inflows) == 0:
             inflows = values
@@ -397,7 +484,10 @@ def add_or_subtract_flows(currentAlt, timewindow, inflow_records, dss_file, oper
     tsc.fullName = output_dss_record_name
     tsc.values = inflows
     #tsc.startTime = times[1]
-    tsc.units = 'CFS'
+    if what=="flow":
+        tsc.units = 'CFS'
+    else:
+        tsc.units = what
     tsc.type = tstype
     #tsc.endTime = times[-1]
     tsc.numberValues = len(inflows)

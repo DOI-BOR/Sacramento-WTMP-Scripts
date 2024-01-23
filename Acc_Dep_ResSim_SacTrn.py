@@ -38,22 +38,22 @@ def computeAlternative(currentAlternative, computeOptions):
 
     sdf.resample_dss_ts(DMS_hydro_dss_file,'/MR Sac.-Shasta Lake/Sacramento R. a Delta-Flow/Flow//1Day/230.9.125.1.1/',rtw,output_dss_file,'1HOUR')
     sdf.resample_dss_ts(DMS_hydro_dss_file,'/MR Sac.-Shasta Lake/McCloud River-Flow/Flow//1Day/230.8.125.1.1/',rtw,output_dss_file,'1HOUR')
-	# Pit river is recorded at GMT midnight, and so when requesting the run time windows from DSS, the last day is left off the record.
-	# This generates some bad value in the balance flow, which hopefully we catch and make zero, and which hopefully don't effect the run much
-	# because it's only the last day.
+    # Pit river is recorded at GMT midnight, and so when requesting the run time windows from DSS, the last day is left off the record.
+    # This generates some bad value in the balance flow, which hopefully we catch and make zero, and which hopefully don't effect the run much
+    # because it's only the last day.
     sdf.resample_dss_ts(DMS_hydro_dss_file,'/MR Sac.-Shasta Lake/Pit R. Branch-Flow/Flow//1Day/230.6.125.1.1/',rtw,output_dss_file,'1HOUR')
     sdf.resample_dss_ts(DMS_hydro_dss_file,'/MR SAC.-SHASTA LAKE/SULANHARAS CREEK-FLOW/Flow//1Day/230.7.125.1.1/',rtw,output_dss_file,'1HOUR')
         
 
     inflow_records = ['::'.join([output_dss_file,'/MR Sac.-Shasta Lake/McCloud River-Flow/Flow//1Hour/230.8.125.1.1/']),
-                      '::'.join([output_dss_file,'/MR Sac.-Shasta Lake/McCloud River-Flow/Flow//1Hour/230.8.125.1.1/']),
+                      '::'.join([output_dss_file,'/MR Sac.-Shasta Lake/Sacramento R. a Delta-Flow/Flow//1Hour/230.9.125.1.1/']),
                       '::'.join([output_dss_file,'/MR Sac.-Shasta Lake/Pit R. Branch-Flow/Flow//1Hour/230.6.125.1.1/']),
                       '::'.join([output_dss_file,'/MR SAC.-SHASTA LAKE/SULANHARAS CREEK-FLOW/Flow//1Hour/230.7.125.1.1/']),]
 
     outflow_records = ['/MR Sac.-Shasta Lake/SHA-Spill Release/Flow//1Hour/230.11.125.4.1/',
-                       '::'.join([fallback_dss_file,'/USBR/SHASTA_RRU/FLOW//1HOUR/SUPP/']),
-                       '::'.join([fallback_dss_file,'/USBR/SHASTA_RRM/FLOW//1HOUR/SUPP/']),
-                       '::'.join([fallback_dss_file,'/USBR/SHASTA_RRL/FLOW//1HOUR/SUPP/']),
+                       '::'.join([output_dss_file,'/MR Sac.-Shasta Lake/SHA-Outlet Flow 950 Sum/Flow//1Hour/Derived/']),
+                       '::'.join([output_dss_file,'/MR Sac.-Shasta Lake/SHA-Outlet Flow 850 Sum/Flow//1Hour/Derived/']),
+                       '::'.join([output_dss_file,'/MR Sac.-Shasta Lake/SHA-Outlet Flow 750 Sum/Flow//1Hour/Derived/']),
                        '/MR Sac.-Shasta Lake/SHA-Generation Release/Flow//1Hour/230.11.125.3.1/'
                        ]
 
@@ -89,14 +89,15 @@ def computeAlternative(currentAlternative, computeOptions):
 
     inflow_records = ['::'.join([DMS_hydro_dss_file,'/MR Sac.-Shasta Lake/SHA-Generation Release/Flow//1Hour/230.11.125.3.1/']),
                       '::'.join([DMS_hydro_dss_file,'/MR Sac.-Shasta Lake/SHA-Spill Release/Flow//1Hour/230.11.125.4.1/']),
-                      '/USBR/SHASTA_RRU/FLOW//1HOUR/SUPP/',
-                      '/USBR/SHASTA_RRM/FLOW//1HOUR/SUPP/',
-                      '/USBR/SHASTA_RRL/FLOW//1HOUR/SUPP/',                      
+                      '::'.join([output_dss_file,'/MR Sac.-Shasta Lake/SHA-Outlet Flow 950 Sum/Flow//1Hour/Derived/']),
+                      '::'.join([output_dss_file,'/MR Sac.-Shasta Lake/SHA-Outlet Flow 850 Sum/Flow//1Hour/Derived/']),
+                      '::'.join([output_dss_file,'/MR Sac.-Shasta Lake/SHA-Outlet Flow 750 Sum/Flow//1Hour/Derived/']),
                       '::'.join([DMS_hydro_dss_file,'/MR SAC.-WHISKEYTOWN LAKE/WHI-GENERATION RELEASE/FLOW//1HOUR/233.14.125.1.1/']),
-                      '/SPC DEBRIS DAM FLOW CALCULATION/SPRING_CREEK_SPC2017SHIFT-WHI_GEN_RELEASE-NONEG/FLOW//1HOUR/USBR_DERIVED/'
+                      '::'.join([DMS_hydro_dss_file,'/MR Sac.-Keswick Res./Spring Creek Debris Dam (SPR)-Dam Total Release/Flow//1Hour/234.2.125.1.1/']),
                       ]
 
-    outflow_records = ['/USBR/KESWICK_QOUT_SUM/FLOW//1HOUR/USBR_DERIVED/']
+    outflow_records = ['::'.join([DMS_hydro_dss_file,'/MR Sac.-Keswick Res./KES-Dam Total Release/Flow//1Hour/234.1.125.1.1/'])]
+    
 
     stage_record = '/USBR/KESWICK/ELEVATION//1HOUR/USBR_BLESSED/'
     evap_record = '::'.join([output_dss_file,'//ZEROS/FLOW//1HOUR/ZEROS/'])
