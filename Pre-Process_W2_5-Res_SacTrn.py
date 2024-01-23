@@ -29,8 +29,8 @@ def computeAlternative(currentAlternative, computeOptions):
 
     data_preprocess = fpp.forecast_data_preprocess_W2_5Res(currentAlternative, computeOptions)
 
-	# compute acc TODO
+    # compute acc TODO
     #acc_dep = Acc_Dep_ResSim_SacTrn.computeAlternative(currentAlternative, computeOptions)
 
     if data_preprocess:# and acc_dep:
-    	return True
+        return True

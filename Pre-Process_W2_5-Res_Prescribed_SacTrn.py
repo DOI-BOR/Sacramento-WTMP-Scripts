@@ -79,12 +79,12 @@ def computeAlternative(currentAlternative, computeOptions):
             # now, W2 model alternative directory is configured for startyear, ready for the W2 plugin to
             # work it's magic on the W2_con file and execute simulation   
 
-	DMS_preprocess.preprocess_W2_5Res(currentAlternative, computeOptions)
+    DMS_preprocess.preprocess_W2_5Res(currentAlternative, computeOptions)
 
     #acc_dep = Acc_Dep_ResSim_SacTrn.computeAlternative(currentAlternative, computeOptions)
 
     # remove me most of the time
-    backdate_W2_files_to_skip_compute(run_dir)
+    #backdate_W2_files_to_skip_compute(run_dir)
     
     return True
 
