@@ -99,7 +99,7 @@ def computeAlternative(currentAlternative, computeOptions):
     outflow_records = ['::'.join([DMS_hydro_dss_file,'/MR Sac.-Keswick Res./KES-Dam Total Release/Flow//1Hour/234.1.125.1.1/'])]
     
 
-    stage_record = '/USBR/KESWICK/ELEVATION//1HOUR/USBR_BLESSED/'
+    stage_record = '::'.join([DMS_hydro_dss_file,'/MR Sac.-Keswick Res./KES-Reservoir Elevation/Elev//1Hour/234.1.145.1.1/'])
     evap_record = '::'.join([output_dss_file,'//ZEROS/FLOW//1HOUR/ZEROS/'])
 
     elev_stor_area = cbfj.read_elev_storage_area_file(os.path.join(shared_dir, 'AMR_scratch_keswick.csv'), 'Keswick') #TODO: check this
