@@ -256,7 +256,7 @@ def read_inflows_outflows(currentAlt, dss_file, inflow_records, outflow_records,
             for vi, v in enumerate(values):
                 outflows[vi] += v
 
-	dssFm.close()
+    dssFm.close()
 
     # Inflow minus outflow record
     inflow_outflow = []
@@ -270,7 +270,7 @@ def read_inflows_outflows(currentAlt, dss_file, inflow_records, outflow_records,
     return times,inflow_outflow
 
 
-def predict_elevation(currentAlt, timewindow, res_name, inflow_records, outflow_records, starting_elevation,
+def predict_elevation(currentAlt, starttime_str, endtime_str, res_name, inflow_records, outflow_records, starting_elevation,
                          elev_stor_area, dss_file, output_dss_record_name, output_dss_file, shared_dir,
                          use_conic=False, alt_period=None, alt_period_string=None, balance_period_str='1Hour'):
     '''From inflows/outflows, predict hourly elevation, useful for lookback/starting elevation for forecasts starting
@@ -284,8 +284,6 @@ def predict_elevation(currentAlt, timewindow, res_name, inflow_records, outflow_
     cfs_2_acreft = balance_period * 3600. / 43559.9
     acreft_2_cfs = 1. / cfs_2_acreft
 
-    starttime_str = timewindow.getStartTimeString()
-    endtime_str = timewindow.getEndTimeString()
     starttime_hectime = HecTime(starttime_str).value()
     endtime_hectime = HecTime(endtime_str).value()
 
@@ -294,9 +292,9 @@ def predict_elevation(currentAlt, timewindow, res_name, inflow_records, outflow_
 
     currentAlt.addComputeMessage("Len inflow_outflow:"+str(len(inflow_outflow)))
     currentAlt.addComputeMessage("Len times:"+str(len(times)))
-	
-	# TODO: support conic interpolation
-	# TODO: support evap, but really that's just a positive outflow....
+    
+    # TODO: support conic interpolation
+    # TODO: support evap, but really that's just a positive outflow....
     storage = linear_interpolation(elev_stor_area['elev'], elev_stor_area['stor'], starting_elevation)
     storage = [storage,]
     elev_predicted = []
@@ -309,7 +307,7 @@ def predict_elevation(currentAlt, timewindow, res_name, inflow_records, outflow_
     steptime = times[1]-times[0]
     tsc = TimeSeriesContainer()
     #tsc.times = times[1:]
-    tsc.startTime = times[0] - steptime
+    tsc.startTime = times[0] #- steptime
     tsc.interval = int(balance_period)*60
     tsc.fullName = output_dss_record_name
     tsc.values = [starting_elevation] + elev_predicted
@@ -481,10 +479,10 @@ def create_balance_flows(currentAlt, timewindow, res_name, inflow_records, outfl
     
     # Output record
 
-	# sometimes ResSim does not include the start record in period average simulations, so if one flow or elevation data
-	# record is missing, the calc can sometimes go way off.  Constrain to realistic values, set invalid to zero.
-	# also, recs offset by timezone and/or daily records not at midnight can introduced bad values on the first or last days.
-	# So, filter at least the first 24 hours, last 24 hours
+    # sometimes ResSim does not include the start record in period average simulations, so if one flow or elevation data
+    # record is missing, the calc can sometimes go way off.  Constrain to realistic values, set invalid to zero.
+    # also, recs offset by timezone and/or daily records not at midnight can introduced bad values on the first or last days.
+    # So, filter at least the first 24 hours, last 24 hours
     check_steps = 1
     bad_flow_bound = 1.e7
     if balance_period_str.lower() == '1hour':

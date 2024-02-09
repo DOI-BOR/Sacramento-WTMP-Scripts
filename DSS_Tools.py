@@ -16,9 +16,12 @@ from java.util import Vector, Date
 import datetime
 from hec.heclib.util import HecTime
 
-def first_value(dss_file,dss_rec):
+def first_value(dss_file,dss_rec,start_str=None,end_str=None):
     dssFm = HecDss.open(dss_file)        
-    tsc = dssFm.get(dss_rec,True)
+    if start_str is None and end_str is None:
+        tsc = dssFm.get(dss_rec,True)
+    else:
+        tsc = dssFm.read(dss_rec,start_str,end_str,False).getData()
     dssFm.close()
     return tsc.values[0]
 
@@ -77,12 +80,14 @@ def hectimes_from_tsc(tsc):
 
 
 def shift_pit_river_time(input_dss_file,dss_rec,output_dss_file,out_rec,start_date=None,end_date=None):
+    # important to not have dss_rec==out_rec, otherwise you will continually shift the record in time
+    # whenever the calling script runs...    
 
     tsm_pit = dss_read_ts_safe(input_dss_file,dss_rec,start_date=start_date,end_date=end_date,returnTSM=True)
 
     tsm_pit = tsm_pit.shiftInTime("-12Hour")
     tsc_pit = tsm_pit.getData()
-    tsc_pit.fullName = out_rec
+    tsc_pit.fullName = out_rec  
 
     dss_out = HecDss.open(output_dss_file)
     dss_out.put(tsc_pit)
@@ -399,7 +404,7 @@ def add_flows(currentAlt, timewindow, inflow_records, dss_file, output_dss_recor
 
 
 def add_or_subtract_flows(currentAlt, timewindow, inflow_records, dss_file, operation,
-                       output_dss_record_name, output_dss_file, what="flow"):
+                       output_dss_record_name, output_dss_file, what="flow", prepend_n=0):
     # operation: list where True = add, False = subtract, e.g. [True,False,True] to substract the 2nd
     # record from the sum of the first and third records
     # what == "flow": assume flows and rectify units
@@ -477,6 +482,15 @@ def add_or_subtract_flows(currentAlt, timewindow, inflow_records, dss_file, oper
             else:
                 for vi, v in enumerate(values):
                     inflows[vi] -= v
+
+    if prepend_n > 0:
+        # add first value onto front of record
+        # Sometimes ResSim needs some lookback values, or whatever
+        p_times = [times[i] for i in range(len(times))] # convert to list - annoying
+        time_delta = times[1] -times[0]
+        times = [p_times[0] - time_delta*i for i in range(prepend_n,0,-1)] + p_times
+        values = [inflows[i] for i in range(len(inflows))] # convert to list - annoying
+        inflows = [values[0]]*prepend_n + values
                     
     # Output record
     tsc = TimeSeriesContainer()
@@ -716,3 +730,20 @@ def airtemp_lapse(dss_file,dss_rec,lapse_in_C,dss_outfile,f_part):
     dss_out = HecDss.open(dss_outfile)
     dss_out.write(tsc)
     dss_out.close()
+
+def preprend_first_value_on_ts(dss_file,dss_rec,prepend_n):
+    '''Sometimes ResSim needs some lookback values, or whatever'''
+    dss = HecDss.open(dss_file)
+    tsc = dss.get(dss_rec,True)
+
+    time_delta = tsc.times[1] - tsc.times[0]
+    times = [tsc.times[i] for i in range(len(tsc.times))] # convert to list - annoying
+    tsc.times = [times[0] - time_delta*i for i in range(prepend_n,0,-1)] + times
+    tsc.startTime = tsc.times[0]
+    values = [tsc.values[i] for i in range(len(tsc.values))] # convert to list - annoying
+    tsc.values = [values[0]]*prepend_n + values
+    tsc.numberValues = len(tsc.values)
+
+    dss.put(tsc)
+    dss.close()
+   

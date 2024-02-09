@@ -32,17 +32,89 @@ units_need_fixing = ['tenths','deg','kph'] #'radians',]
 def fix_DMS_types_units(dss_file):
     '''This method was implemented to change data types to PER-AVER that are not coming from the DMS that way'''
     recs = DSS_Tools.get_sanitized_record_list(dss_file)
+
     dss = HecDss.open(dss_file)
     
     for r in recs:
         rlow = r.lower()
-        if not '/location info' in rlow and not '/temp-equil' in rlow:
+        # things not to read: paired data, integer/scalar/text vars and some
+        # other things that are causing trouble.
+        if not '/location info' in rlow and not '/temp-equil' in rlow and \
+          not '/depth-temp' in rlow and not 'icpathsmap' in rlow and \
+          not '/downstream_control_loc' in rlow and not 'temp-water-target' in rlow:
+        
+            tsc = dss.get(r,True)
+
+            if "/flow" in rlow or "/1day/" in rlow:
+                tsc.type = 'PER-AVER'
+                #tsc.setStoreAsDoubles(True)
+                dss.write(tsc)
+
+            units = str(tsc.units).lower()  # just to make sure
+            
+            if units in units_need_fixing:
+                if units == 'tenths':
+                    # save off a copy of cloud record in 0-1 for ResSim
+                    rec_parts = tsc.fullName.split('/')
+                    rec_parts[3] += '-FRAC'
+                    tsc.fullName = '/'.join(rec_parts)
+                    tsc.units = 'FRAC'
+                    for i in range(len(tsc.values)) :
+                        tsc.values[i] = tsc.values[i] / 10.0
+                    #tsc.setStoreAsDoubles(True)         
+                    dss.put(tsc)
+                if units == 'radians':
+                    # save off a copy in deg
+                    rec_parts = tsc.fullName.split('/')
+                    rec_parts[3] += '-DEG'
+                    tsc.fullName = '/'.join(rec_parts)
+                    tsc.units = 'deg'
+                    for i in range(len(tsc.values)) :
+                        tsc.values[i] = tsc.values[i] / (2*3.141592653589793) * 360.0
+                    #tsc.setStoreAsDoubles(True)         
+                    dss.put(tsc)
+                if units == 'deg':
+                    # save off a copy in redians
+                    rec_parts = tsc.fullName.split('/')
+                    rec_parts[3] += '-RADIANS'
+                    tsc.fullName = '/'.join(rec_parts)
+                    tsc.units = 'radians'
+                    for i in range(len(tsc.values)) :
+                        tsc.values[i] = tsc.values[i] / 360.0 * (2*3.141592653589793)
+                    #tsc.setStoreAsDoubles(True)            
+                    dss.put(tsc)
+                if units == 'kph':
+                    # convert to m/s 
+                    tsc.units = 'm/s'
+                    for i in range(len(tsc.values)) :
+                        tsc.values[i] = tsc.values[i] / 3.6
+                    #tsc.setStoreAsDoubles(True)
+                    dss.put(tsc)
+
+    dss.close()
+
+
+def fix_DMS_types_units_old(dss_file):
+    '''This method was implemented to change data types to PER-AVER that are not coming from the DMS that way'''
+    recs = DSS_Tools.get_sanitized_record_list(dss_file)
+
+    dss = HecDss.open(dss_file)
+    
+    for r in recs:
+        rlow = r.lower()
+        # things not to read: paired data, integer/scalar/text vars and some
+        # other things that are causing trouble.
+        if not '/location info' in rlow and not '/temp-equil' in rlow and \
+          not '/depth-temp' in rlow and not 'icpathsmap' in rlow and \
+          not '/downstream_control_loc' in rlow:
         
             tsm = dss.read(r)
 
             if "/flow" in rlow or "/1day/" in rlow:
                 tsm.setType('PER-AVER')
-                dss.write(tsm)
+                tsc = tsm.getData()
+                #tsc.setStoreAsDoubles(True)
+                dss.write(tsc)
             
             if tsm.getUnits().lower() in units_need_fixing:
                 if tsm.getUnits() == 'tenths':
@@ -53,7 +125,8 @@ def fix_DMS_types_units(dss_file):
                     tsc.fullName = '/'.join(rec_parts)
                     tsc.units = 'FRAC'
                     for i in range(len(tsc.values)) :
-                        tsc.values[i] = tsc.values[i] / 10.0                
+                        tsc.values[i] = tsc.values[i] / 10.0
+                    #tsc.setStoreAsDoubles(True)         
                     dss.write(tsc)
                 if tsm.getUnits() == 'radians':
                     # save off a copy in deg
@@ -63,7 +136,8 @@ def fix_DMS_types_units(dss_file):
                     tsc.fullName = '/'.join(rec_parts)
                     tsc.units = 'deg'
                     for i in range(len(tsc.values)) :
-                        tsc.values[i] = tsc.values[i] / (2*3.141592653589793) * 360.0                
+                        tsc.values[i] = tsc.values[i] / (2*3.141592653589793) * 360.0
+                    #tsc.setStoreAsDoubles(True)         
                     dss.write(tsc)
                 if tsm.getUnits() == 'deg':
                     # save off a copy in redians
@@ -73,7 +147,8 @@ def fix_DMS_types_units(dss_file):
                     tsc.fullName = '/'.join(rec_parts)
                     tsc.units = 'radians'
                     for i in range(len(tsc.values)) :
-                        tsc.values[i] = tsc.values[i] / 360.0 * (2*3.141592653589793)                
+                        tsc.values[i] = tsc.values[i] / 360.0 * (2*3.141592653589793)
+                    #tsc.setStoreAsDoubles(True)            
                     dss.write(tsc)
                 if tsm.getUnits() == 'kph':
                     # convert to m/s 
@@ -81,6 +156,7 @@ def fix_DMS_types_units(dss_file):
                     tsc.units = 'm/s'
                     for i in range(len(tsc.values)) :
                         tsc.values[i] = tsc.values[i] / 3.6
+                    #tsc.setStoreAsDoubles(True)
                     dss.write(tsc)
 
                     # also, add w2link
@@ -101,8 +177,44 @@ def fix_DMS_types_units(dss_file):
                         tsc.fullName = '/'.join(rec_parts)
                         for i in range(len(tsc.values)) :
                             tsc.values[i] = tsc.values[i] / 3.6
+                        #tsc.setStoreAsDoubles(True)
                         dss.write(tsc)
     dss.close()
+
+
+def standardize_bc_temp_water_to_C(dss_file,output_dss_file):
+    '''Make copies of temp-water records in C (standardizing on C) for ResSim linking'''
+    recs = DSS_Tools.get_sanitized_record_list(dss_file)
+    dss = HecDss.open(dss_file)
+
+    if dss_file == output_dss_file:
+        dss_out = dss
+    else:
+        dss_out = HecDss.open(output_dss_file)
+    
+    for r in recs:
+        rlow = r.lower()
+        if '/temp-water' in rlow:
+
+            tsc = dss.get(r,True)
+
+            incoming_units = tsc.units.lower()
+        
+            tsc = dss.get(r,True)
+            rec_parts = tsc.fullName.split('/')
+            rec_parts[3] += '-C'
+            tsc.fullName = '/'.join(rec_parts)
+            tsc.units = 'C'
+                        
+            if incoming_units == 'f' or incoming_units == 'degf':                
+                for i in range(len(tsc.values)) :
+                    tsc.values[i] = (tsc.values[i] - 32.0)*5.0/9.0             
+
+            dss_out.put(tsc)
+
+    dss.close()
+    if dss_file != output_dss_file:
+        dss_out.close()
 
 
 def DMS_fix_units_types(hydro_dss,met_dss_file):
@@ -133,6 +245,32 @@ def splice_lewiston_met_data(currentAlternative, rtw, met_dss_file, output_dss_f
     DSS_Tools.replace_data(currentAlternative, rtw, pairs, met_dss_file, output_dss_file, months, standard_interval='1HOUR')
    
 
+def compute_river_balance_flows(currentAlternative, rtw, hydro_dss, obs_dss_file, output_dss_file):
+
+    # balance at IGO
+    flow_records = [obs_dss_file + "::/USGS CLEAR CR/11372000 NR IGO/FLOW//1HOUR/USGS-MERGED-CROP/",
+                    output_dss_file+'::/MR Sac.-Whiskeytown Lake/WHI-Total Dam Outflow/Flow//1Hour/ResSim_PreProcess/']
+    out_rec = "/CLEAR CR/IGO BALANCE FLOW/FLOW//1HOUR/ResSim_PreProcess/"
+    DSS_Tools.add_or_subtract_flows(currentAlternative, rtw, flow_records, hydro_dss,
+                              [True, False],
+                              out_rec, output_dss_file, what="flow",prepend_n=25)
+    DSS_Tools.resample_dss_ts(output_dss_file,out_rec,rtw,output_dss_file,'1DAY')
+
+    # balance at Bend Bridge
+    DSS_Tools.resample_dss_ts(hydro_dss,'/MR Sac.-Keswick Res./KES-Dam Total Release/Flow//1Hour/234.1.125.1.1/',rtw,output_dss_file,'1DAY')
+    flow_records = [obs_dss_file + "::/USGS SACRAMENTO R/11377100 AB BEND BRDIGE/FLOW//1DAY/USGS/",
+                    obs_dss_file + "::/USGS CLEAR CR/11372000 NR IGO/FLOW//1DAY/USGS/",
+                    "/MR Sac.-Sac River/11370700 ACID-Dly Flow/Flow//1Day/237.60.125.2.1/",
+                    "/MR Sac.-Sac River/11374000 Cow Creek-Dly Flow/Flow//1Day/237.61.125.2.1/",
+                    "/MR Sac.-Sac River/11376000 Cottonwood-Dly Flow/Flow//1Day/237.62.125.2.1/",
+                    "/MR Sac.-Sac River/11376550 Battle Creek-Dly Flow/Flow//1Day/237.63.125.2.1/",
+                    output_dss_file+"::/MR Sac.-Keswick Res./KES-Dam Total Release/Flow//1Day/234.1.125.1.1/",]
+    out_rec = "/SACRAMENTO R/BEND BR BALANCE FLOW/FLOW//1DAY/ResSim_PreProcess/"
+    DSS_Tools.add_or_subtract_flows(currentAlternative, rtw, flow_records, hydro_dss,
+                              [True, False, False, False, False, False, False],
+                              out_rec, output_dss_file, what="flow",prepend_n=1)
+    
+
 def compute_5Res_outflows(currentAlternative, rtw, hydro_dss, output_dss_file):
     # add PG flows 1-5 to create PG_SUM record used by ResSim/TCD scripts
     # Hmm someone has done that for us, hooray!
@@ -161,7 +299,7 @@ def compute_plotting_records(currentAlternative, rtw, hydro_dss, output_dss_file
     # Keswick: outlet gase only, no summing needed
     # Whiskeytown: outlet + spill = total dam outflow
     inflow_records = ['/MR Sac.-Whiskeytown Lake/WHI-Outlet Release/Flow//1Hour/233.14.125.2.1/',
-                      '/MR Sac.-Whiskeytown Lake/WHI-Generation Release/Flow//1Hour/233.14.125.1.1/']
+                      '/MR Sac.-Whiskeytown Lake/WHI-Spill Release/Flow//1Hour/233.14.125.5.1/']
     DSS_Tools.add_flows(currentAlternative, rtw, inflow_records, hydro_dss,
               '/MR Sac.-Whiskeytown Lake/WHI-Total Dam Outflow/Flow//1Hour/ResSim_PreProcess/', output_dss_file)
 
@@ -183,17 +321,35 @@ def compute_plotting_records(currentAlternative, rtw, hydro_dss, output_dss_file
 
 def combine_shasta_gates_flows(currentAlt,timewindow,hydro_dss,output_dss_file):
 
+    # construct and add gate openings - old record names
+    # Example record:
+    # /MR Sac.-Shasta Lake/SHA-TCD-Bottom Gate 1/Gate Position//1Hour/230.13.223.B1.1/ --- old rec name
+    #g_rec_1 = "/MR Sac.-Shasta Lake/SHA-TCD-"
+    #g_rec_2 = "/Gate Position//1Hour/230.13.223."
+    #for level in ['Top','Middle','Bottom','Side']:
+    #    ngate = 2 if level=='Side' else 5
+    #    gate_recs = []
+    #    for ng in range(1,ngate+1):
+    #         sg = str(ng)
+    #         gate_recs.append(g_rec_1+level+" Gate "+sg+g_rec_2+level[0]+sg+".1/")
+    #    out_rec = "/MR Sac.-Shasta Lake/SHA-TCD-"+level+" Gate Sum/count-gate//1Hour/Derived/"
+    #    DSS_Tools.add_or_subtract_flows(currentAlt, timewindow, gate_recs, hydro_dss, 
+    #                   [True for i in range(ngate)],
+    #                   out_rec, output_dss_file, what="n/a")
+
     # construct and add gate openings
     # Example record:
-    # /MR Sac.-Shasta Lake/SHA-TCD-Bottom Gate 1/Gate Position//1Hour/230.13.223.B1.1/
-    g_rec_1 = "/MR Sac.-Shasta Lake/SHA-TCD-"
-    g_rec_2 = "/Gate Position//1Hour/230.13.223."
+    # /MR Sac.-Shasta Lake/SHA-TCD-Gate Position 1_B/Gate Position 1//1Hour/230.13.224.B.1/
+    g_rec_1 = "/MR Sac.-Shasta Lake/SHA-TCD-Gate Position "
+    g_rec_2 = "/Gate Position "
+    g_rec_3 = "//1Hour/230.13.224."
     for level in ['Top','Middle','Bottom','Side']:
         ngate = 2 if level=='Side' else 5
         gate_recs = []
         for ng in range(1,ngate+1):
              sg = str(ng)
-             gate_recs.append(g_rec_1+level+" Gate "+sg+g_rec_2+level[0]+sg+".1/")
+             lg = level[0]
+             gate_recs.append(g_rec_1 + sg+"_"+lg + g_rec_2 + sg + g_rec_3 + lg+"."+sg)
         out_rec = "/MR Sac.-Shasta Lake/SHA-TCD-"+level+" Gate Sum/count-gate//1Hour/Derived/"
         DSS_Tools.add_or_subtract_flows(currentAlt, timewindow, gate_recs, hydro_dss, 
                        [True for i in range(ngate)],
@@ -461,6 +617,7 @@ def preprocess_W2_5Res(currentAlternative, computeOptions):
 
     output_dss_file = os.path.join(shared_dir,'DMS_SacTrn_ResSim_Pre-Process.dss') 
 
+    currentAlternative.addComputeMessage('Rectifying units - this may take a while if the length of DMS data is large...')
     hydro_dss = os.path.join(shared_dir, 'DMS_SacTrnHydroTS.dss')
     fix_DMS_types_units(hydro_dss)
     met_dss_file = os.path.join(shared_dir,'DMS_SacTrnMet.dss')
@@ -503,10 +660,13 @@ def preprocess_ResSim_5Res(currentAlternative, computeOptions):
 
     output_dss_file = os.path.join(shared_dir,'DMS_SacTrn_ResSim_Pre-Process.dss')
 
+    currentAlternative.addComputeMessage('Rectifying units - this may take a while if the length of DMS data is large...')
     hydro_dss = os.path.join(shared_dir, 'DMS_SacTrnHydroTS.dss')
     fix_DMS_types_units(hydro_dss)
     met_dss_file = os.path.join(shared_dir,'DMS_SacTrnMet.dss')
     fix_DMS_types_units(met_dss_file)
+    # ressim can't handle different units under model linking
+    standardize_bc_temp_water_to_C(hydro_dss,output_dss_file)
 
     DSS_Tools.create_constant_dss_rec(currentAlternative, rtw, output_dss_file, constant=0.0, what='flow', 
                         dss_type='PER-AVER', period='1DAY',cpart='ZEROS',fpart='ZEROS')
@@ -531,7 +691,9 @@ def preprocess_ResSim_5Res(currentAlternative, computeOptions):
 
     splice_lewiston_met_data(currentAlternative, rtw, met_dss_file, output_dss_file,months=[1,2,3])
     compute_5Res_outflows(currentAlternative, rtw, hydro_dss, output_dss_file)
-    compute_plotting_records(currentAlternative, rtw, hydro_dss, output_dss_file)
+    compute_plotting_records(currentAlternative, rtw, hydro_dss, output_dss_file)    
+    compute_river_balance_flows(currentAlternative, rtw, hydro_dss, 
+        os.path.join(shared_dir,"WTMP_SacTrn_Historical.dss"), output_dss_file)  # depends on WHI dam flow, created in compute_plotting_records
 
     # calculate meteorological airtemp lapse for the elevation @ Shasta Lake
     currentAlternative.addComputeMessage('lapse infile: '+met_dss_file)
