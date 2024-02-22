@@ -1,5 +1,10 @@
-import random
-from com.rma.io import DssFileManagerImpl
+import sys
+print(sys.path)
+import DSS_Tools
+reload(DSS_Tools)
+import flowweightaverage
+reload(flowweightaverage)
+
 
 ##
 #
@@ -12,47 +17,40 @@ from com.rma.io import DssFileManagerImpl
 # no explicit return will be treated as a successful return
 #
 ##
+
+def fixFpartToInput(locations_paths, outpath):
+    # get F-part from input locations
+    location_fpart = locations_paths[0][0].split('/')[6]
+    out_parts = outpath.split('/')
+    out_parts[6] = location_fpart
+    return '/'.join(out_parts)
+
+def getOutputPaths(locations_paths,currentAlternative):
+    outputlocations = currentAlternative.getOutputDataLocations()
+    outputPaths = []
+    for opl in outputlocations:
+        op_ts = currentAlternative.createOutputTimeSeries(opl)
+        outputPaths.append(fixFpartToInput(locations_paths,str(op_ts)))
+    return outputPaths
+    
 def computeAlternative(currentAlternative, computeOptions):
-	currentAlternative.addComputeMessage("Computing ScriptingAlternative:" + currentAlternative.getName() )
-	write_example_dl(currentAlternative)
-	return True
+    currentAlternative.addComputeMessage("Computing ScriptingAlternative:" + currentAlternative.getName() )
+    locations = currentAlternative.getInputDataLocations()
+    locations_paths = flowweightaverage.organizeLocations(currentAlternative, locations)    
+    output_paths = getOutputPaths(locations_paths,currentAlternative)
+    
+    currentAlternative.addComputeMessage('\n')
+    dss_file = computeOptions.getDssFilename()
+    rtw = computeOptions.getRunTimeWindow()
+
+    # Clear Creek Tunnel Heating
+    DSS_Tools.add_DSS_Data(currentAlternative, dss_file, rtw, locations_paths[0], output_paths[0])
+
+    # Spring creek tunnel heating
+    DSS_Tools.add_DSS_Data(currentAlternative, dss_file, rtw, locations_paths[1], output_paths[1])
+ 
+    return True
 
 
-##
-#
-# Output data locations can be retrieved from the alternative.
-# The method createOutputTimeSeries can be used to create the associated
-# TimeSeriesContainer for each output data location.
-# Changes to the returned TimeSeriesContainer must be written to disk.
-#
-##
-def write_example_dl(currentAlternative):
-	dfm = DssFileManagerImpl.getDssFileManager()
-	odls = currentAlternative.getOutputDataLocations()
-	val = 0
-	for odl in odls:
-		val = val + 1
-		tsc = currentAlternative.createOutputTimeSeries(odl)
-		# currentAlternative.addComputeMessage("tsc.fileName:" + tsc.fileName + " fullName:" + tsc.fullName)
-		end = len(tsc.values)
-		for i in range(0,end):
-			tsc.values[i] = i+val
-		dfm.write(tsc)
-
-
-##
-#
-# computeOutputVariable function is called when Scripting Output Variables use the 'Other' statistic or
-# when variables are not linked to output data locations.
-# The computed value needs to be passed to the variable via currentVariable.setValue().
-# The computeOutputVariable function does not need to be defined if output variables are not used
-# or if all output variables are linked to output data locations and do not use "Other".
-#
-##
-def computeOutputVariable(currentAlternative, currentVariable):
-	demo_val = random.randint(10, 100)
-	currentAlternative.addComputeMessage("Computing ScriptingAlternative:" + currentAlternative.getName()
-		+ " Variable:'" + currentVariable.getName() + "' setValue(" + str(demo_val) + ")")
-	currentVariable.setValue(demo_val)
-	return True
+            
 

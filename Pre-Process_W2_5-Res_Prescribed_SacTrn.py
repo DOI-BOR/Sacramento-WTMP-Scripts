@@ -56,7 +56,23 @@ def computeAlternative(currentAlternative, computeOptions):
         currentAlternative.addComputeMessage('annual_config_dir: '+annual_config_dir)
         currentAlternative.addComputeMessage('base_dir: '+base_dir)
         if not os.path.exists(annual_config_dir):
+ 
+            currentAlternative.addComputeMessage(W2_model+'- annual config not found, trying default year...')
+            # try to select default
+            if 'Trinity' in W2_model:
+                model_dir,annual_config_dir,base_dir = annual_config_dirs_from_run_dir(run_dir,W2_model,'2018')
+            elif 'Lewsiton' in W2_model:
+                model_dir,annual_config_dir,base_dir = annual_config_dirs_from_run_dir(run_dir,W2_model,'2019')
+            elif 'Whiskeytown' in W2_model:
+                model_dir,annual_config_dir,base_dir = annual_config_dirs_from_run_dir(run_dir,W2_model,'2018')
+            elif 'Shasta' in W2_model:
+                model_dir,annual_config_dir,base_dir = annual_config_dirs_from_run_dir(run_dir,W2_model,'2018')
+            elif 'Keswick' in W2_model:
+                model_dir,annual_config_dir,base_dir = annual_config_dirs_from_run_dir(run_dir,W2_model,'2017')
+            
+        if not os.path.exists(annual_config_dir):   
             currentAlternative.addComputeMessage(W2_model+'- annual config not found; W2 may be configured incorrectly for this time window.')
+
         else:        
             # copy original W2 model alternative files to 'base' directory for safekeeping/later returning
 
