@@ -26,6 +26,13 @@ reload(DSS_Tools)
 #
 ##
 
+def fixFpartToInput(inputpath, outpath):
+    # get F-part from input locations
+    location_fpart = inputpath.split('/')[6]
+    out_parts = outpath.split('/')
+    out_parts[6] = location_fpart
+    return '/'.join(out_parts)
+
 def computeAlternative(currentAlternative, computeOptions):
     currentAlternative.addComputeMessage("Computing ScriptingAlternative:" + currentAlternative.getName() )
  
@@ -67,6 +74,13 @@ def computeAlternative(currentAlternative, computeOptions):
 
     cfs_limit = 1.0 #float
     flowweightaverage.FWA2(currentAlternative, dss_file, rtw, locations, outputpath, cfs_limit, 10.0)
+
+    # write a copy out using the input model f-part, so that plotting will be able to use it with the input model
+    #currentAlternative.addComputeMessage("Len of locations: {0}".format(len(locations)))
+    # ineffcient, could add extra copy in sommewhere else....
+    outputpath = fixFpartToInput(str(locations[0]), outputpath)
+    flowweightaverage.FWA2(currentAlternative, dss_file, rtw, locations, outputpath, cfs_limit, 10.0)
+
     
 
     # Add tunnel heating to Clear Creek tunnel temperatures
@@ -140,6 +154,12 @@ def computeAlternative(currentAlternative, computeOptions):
     tsc.startHecTime = rtw.getStartTime()
     tsc.endHecTime = rtw.getEndTime()
     dssFm.write(tsc)
+
+    # write a copy out using the input model f-part, so that plotting will be able to use it with the input model
+    #currentAlternative.addComputeMessage("Len of locations: {0}".format(len(locations)))
+    tsc.fullName = fixFpartToInput(tspath, str(outputpath))
+    dssFm.write(tsc)
+        
     dssFm.close()
     currentAlternative.addComputeMessage("Number of Written values: {0}".format(len(new_values)))
 

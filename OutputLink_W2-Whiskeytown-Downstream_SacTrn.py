@@ -22,6 +22,13 @@ reload(DSS_Tools)
 #
 ##
 
+def fixFpartToInput(inputpath, outpath):
+    # get F-part from input locations
+    location_fpart = inputpath.split('/')[6]
+    out_parts = outpath.split('/')
+    out_parts[6] = location_fpart
+    return '/'.join(out_parts)
+
 def computeAlternative(currentAlternative, computeOptions):
     currentAlternative.addComputeMessage("Computing ScriptingAlternative:" + currentAlternative.getName() )
     
@@ -160,6 +167,11 @@ def computeAlternative(currentAlternative, computeOptions):
     tsc.startHecTime = rtw.getStartTime()
     tsc.endHecTime = rtw.getEndTime()
     dssFm.write(tsc)
+
+    # write a copy out using the input model f-part, so that plotting will be able to use it with the input model
+    tsc.fullName = fixFpartToInput(tspath, outputpath)
+    dssFm.write(tsc)    
+    
     dssFm.close()
     currentAlternative.addComputeMessage("Number of Written values: {0}".format(len(new_values)))
 

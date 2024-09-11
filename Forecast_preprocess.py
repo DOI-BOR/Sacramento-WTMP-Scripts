@@ -170,6 +170,8 @@ def write_forecast_elevations(currentAlternative, rtw, forecast_dss, shared_dir)
     # covert storage to monthly elevation
     elev_stor_area = cbfj.read_elev_storage_area_file(os.path.join(shared_dir, 'AMR_scratch_shasta.csv'), 'Shasta')
     storage_to_elev('Shasta Lake',elev_stor_area,forecast_dss,'/SACRAMENTO RIVER/SHASTA LAKE/STORAGE//1MON/SACTRN_BC_SCRIPT/',conic=False)
+    # convert bc script predicted storage
+    storage_to_elev('Shasta Lake',elev_stor_area,forecast_dss,'/SACRAMENTO RIVER/SHASTA LAKE/STORAGE-CVP//1Day/SACTRN_BC_SCRIPT/',conic=False)
 
     # invent flow-reg reservoir elevation record from shasta storage rec (used for timing only)
     invent_elevation('Keswick Reservoir',forecast_dss,'/SACRAMENTO RIVER/SHASTA LAKE/STORAGE//1MON/SACTRN_BC_SCRIPT/',582.0)
@@ -192,6 +194,8 @@ def write_forecast_elevations(currentAlternative, rtw, forecast_dss, shared_dir)
     # Trinity
     elev_stor_area = cbfj.read_elev_storage_area_file(os.path.join(shared_dir, 'AMR_scratch_trinity.csv'), 'trinity')
     storage_to_elev('Trinity Lake',elev_stor_area,forecast_dss,'/TRINITY RIVER/TRINITY LAKE/STORAGE//1MON/SACTRN_BC_SCRIPT/',conic=False)
+    # convert bc script predicted storage
+    storage_to_elev('Trinity Lake',elev_stor_area,forecast_dss,'/TRINITY RIVER/TRINITY LAKE/STORAGE-CVP//1Day/SACTRN_BC_SCRIPT/',conic=False)
 
     DSS_Tools.resample_dss_ts(forecast_dss,'/TRINITY RIVER/TRINITY LAKE/FLOW-RELEASE//1HOUR/SACTRN_BC_SCRIPT/',None,forecast_dss,'1DAY')
     inflow_records = ['//EF TRINITY/FLOW-IN//1DAY/SACTRN_BC_SCRIPT/',
@@ -209,6 +213,8 @@ def write_forecast_elevations(currentAlternative, rtw, forecast_dss, shared_dir)
     # Whiskeytown
     elev_stor_area = cbfj.read_elev_storage_area_file(os.path.join(shared_dir, 'AMR_scratch_whiskeytown.csv'), 'Whiskeytown')
     storage_to_elev('Whiskeytown Lake',elev_stor_area,forecast_dss,'/CLEAR CREEK/WHISKEYTOWN LAKE/STORAGE//1MON/SACTRN_BC_SCRIPT/',conic=False)
+    # convert bc script predicted storage
+    storage_to_elev('Whiskeytown Lake',elev_stor_area,forecast_dss,'/CLEAR CREEK/WHISKEYTOWN LAKE/STORAGE-CVP//1Day/SACTRN_BC_SCRIPT/',conic=False)
 
     DSS_Tools.resample_dss_ts(forecast_dss,'/CLEAR CREEK/WHISKEYTOWN LAKE/FLOW-DIVERSION-SPRING-CR//1HOUR/SACTRN_BC_SCRIPT/',None,forecast_dss,'1DAY')
     DSS_Tools.resample_dss_ts(forecast_dss,'/CLEAR CREEK/WHISKEYTOWN DAM/FLOW-RELEASE//1HOUR/SACTRN_BC_SCRIPT/',None,forecast_dss,'1DAY')
