@@ -46,9 +46,10 @@ def fix_DMS_types_units(dss_file):
             tsc = dss.get(r,True)
 
             if "/flow" in rlow or "/1day/" in rlow:
-                tsc.type = 'PER-AVER'
-                #tsc.setStoreAsDoubles(True)
-                dss.write(tsc)
+                if not "/storage" and not "/stor" in rlow:
+                    tsc.type = 'PER-AVER'
+                    #tsc.setStoreAsDoubles(True)
+                    dss.write(tsc)
 
             units = str(tsc.units).lower()  # just to make sure
             
