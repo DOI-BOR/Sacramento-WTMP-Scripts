@@ -233,7 +233,7 @@ def splice_lewiston_met_data(currentAlternative, rtw, met_dss_file, output_dss_f
              "/MR Sac.-Clear Cr. to Sac R./KRDD-Dew Point/Temp-DewPoint//1Hour/235.40.51.1.1/"],
             ["/MR SAC.-LEWISTON RES./TCAC1-SOLAR RADIATION/IRRAD-SOLAR//1HOUR/232.5.135.1.1/",
              "/MR SAC.-CLEAR CR. TO SAC R./RRAC1-SOLAR RADIATION/IRRAD-SOLAR//1HOUR/235.41.135.1.1/"],
-            ["/MR Sac.-Lewiston Res./TCAC1-Wind Direction/Dir-Wind-RADIANS/0/1Hour/232.5.133.1.2/",
+            ["/MR Sac.-Lewiston Res./TCAC1-Wind Direction/Dir-Wind/0/1Hour/232.5.133.1.2/",
              "/MR Sac.-Clear Cr. to Sac R./KRDD-Wind Direction/Dir-Wind//1Hour/235.40.133.1.2/"],
             ["/MR Sac.-Lewiston Res./TCAC1-Wind Speed/Speed-Wind//1Hour/232.5.133.1.1/",
              "/MR Sac.-Clear Cr. to Sac R./KRDD-Wind Speed/Speed-Wind//1Hour/235.40.133.1.1/"],
