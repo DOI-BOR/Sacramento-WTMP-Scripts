@@ -176,7 +176,11 @@ def write_forecast_elevations(currentAlternative, rtw, forecast_dss, shared_dir)
     # invent flow-reg reservoir elevation record from shasta storage rec (used for timing only)
     invent_elevation('Keswick Reservoir',forecast_dss,'/SACRAMENTO RIVER/SHASTA LAKE/STORAGE//1MON/SACTRN_BC_SCRIPT/',582.0)
     invent_elevation('Lewiston Reservoir',forecast_dss,'/TRINITY RIVER/TRINITY LAKE/STORAGE//1MON/SACTRN_BC_SCRIPT/',1901.0)
-    
+
+    # also make a one day step, to see if that solves some issues (used for timing only)
+    invent_elevation('Keswick Reservoir',forecast_dss,'/SACRAMENTO RIVER/SHASTA LAKE/STORAGE-CVP//1Day/SACTRN_BC_SCRIPT/',582.0)
+    invent_elevation('Lewiston Reservoir',forecast_dss,'/TRINITY RIVER/TRINITY LAKE/STORAGE-CVP//1Day/SACTRN_BC_SCRIPT/',1901.0)
+
     # write an hourly forecast elevation based on starting elevation and flows
     DSS_Tools.resample_dss_ts(forecast_dss,'/SACRAMENTO RIVER/SHASTA LAKE/FLOW-RELEASE//1HOUR/SACTRN_BC_SCRIPT/',None,forecast_dss,'1DAY')
     inflow_records = ['//SHASTA-PIT-IN/FLOW-IN//1DAY/SACTRN_BC_SCRIPT/',
