@@ -1,6 +1,9 @@
 import datetime as dt
 import math
 
+import tz_offset
+reload(tz_offset)
+
 # TODO: hardcoded lat/lon sould be variable
 
 zero_K = 273.15
@@ -73,7 +76,8 @@ def newton_raphson_solve(f, df, x0, H1, uw, Ta_in, Td, sat_vp_ta, tol=1e-2, max_
 
 def get_decimal_day_of_year(tin):
     foy = dt.datetime(tin.year, 1, 1, 0, 0, 0)
-    ddoy = (tin - foy).total_seconds() / 86400. + 1.
+    ddoy = (tin - foy).total_seconds() / 86400. + 1. + tz_offset.days
+    #print(tin.strftime('%Y-%m-%d %H:%M'),ddoy)
     return ddoy
 
 
@@ -211,7 +215,7 @@ def calc_equilibrium_temp(dtt, at, cl, sr, td, ws):
 
     for j in range(nt):
 
-        print('Equilibrium step ',j,' of ',nt)
+        #print('Equilibrium step ',j,' of ',nt)
         if j == 0:
             x0 = at[j]
         else:
@@ -221,17 +225,17 @@ def calc_equilibrium_temp(dtt, at, cl, sr, td, ws):
         # value.  We calulcate a secondary solution (which is sometimes inaccurate be over a degree, but usually is
         # within 0.2 degrees of the solution using scipy.optimize.minimize) and use it in those cases.
         te.append(-999)
-        #print(dtt[j], at[j], cl[j], sr[j], ws[j], td[j])
+        #print(dtt[j], dtt[j].strftime('%Y-%m-%d %H:%M'), at[j], cl[j], sr[j], ws[j], td[j])
         te_bs = equilibrium_temp(dtt[j], at[j], cl[j], sr[j], ws[j], td[j], x0, type='bs')
         try:
             te[j] = equilibrium_temp(dtt[j], at[j], cl[j], sr[j], ws[j], td[j], x0, type='nr')
         except:
-            print(j, ' Newton-Raphson failure (convergence).  Using bisection-solution equilibrium temp')
+            #print(j, ' Newton-Raphson failure (convergence).  Using bisection-solution equilibrium temp')
             te[j] = te_bs
-        print(te[j],te_bs)
+        #print(te[j],te_bs)
 
-        if abs(te[j] - te_bs) > 2.0:
-            print(j, ' Newton-Raphson failure (bad value).  Using bisection-solution equilibrium temp')
+        if abs(te[j] - te_bs) > 1.0:
+            #print('  Equilibrium step ',j,' of ',nt, 'Newton-Raphson failure (bad value).  Using bisection-solution equilibrium temp')
             te[j] = te_bs
 
     return te
