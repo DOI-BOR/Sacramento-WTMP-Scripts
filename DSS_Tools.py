@@ -16,6 +16,89 @@ from java.util import Vector, Date
 import datetime
 from hec.heclib.util import HecTime
 
+
+def copy_dss_ts(dss_rec,new_fpart=None,new_dss_rec=None,
+                dss_file_path=None,dss_file_handle=None):
+
+       # error check inputs - there are flexible way to copy record
+    if dss_file_path is None and dss_file_handle is None:
+        raise ValueError('copy_dss_rec_to_new_fpart: you must supply either a valid dss_file_path OR dss_file_handle')
+    if new_fpart is None and new_dss_rec is None:
+        raise ValueError('copy_dss_rec_to_new_fpart: you must supply either a new_fpart OR new_dss_rec')
+
+    # (open dss) get record tsc
+    if dss_file_handle is not None:
+        dss_fm = dss_file_handle
+    else:
+         dss_fm = HecDss.open(dss_file_path)
+    tsc = dss_fm.get(dss_rec,True)
+
+    # new dss rec name
+    if new_dss_rec is not None:
+        dss_rec_out = new_dss_rec
+    else:
+        rec_parts = tsc.fullName.split('/')
+        rec_parts[6] = new_fpart
+        dss_rec_out = '/'.join(rec_parts)    
+
+    # fix some terrible units along the way
+    if tsc.units.lower() == 'degc':
+        tsc.units = 'C'
+    elif tsc.units.lower() == 'degf':
+        tsc.units = 'F'
+
+    # write
+    tsc.fullName = dss_rec_out
+    dss_fm.put(tsc)
+
+    if dss_file_handle is None:
+        dss_fm.close()
+
+def jday_from_tsc(tsc):
+    dtt = hectime_to_datetime(tsc)
+    return [decimal_doy(dt) for dt in dtt]        
+
+
+def decimal_doy(dt):
+    doy = dt.timetuple().tm_yday
+    fractional_day = (dt.hour / 24.0) + (dt.minute / 1440.0) + (dt.second / 86400.0) + (dt.microsecond / 86400000000.0)
+    return doy + fractional_day
+
+
+def organizeLocations(curAlt, location_objs, loc_names, return_dss_paths=False):
+    locations_list = []
+    print('num_locs:',len(location_objs))
+    for name in loc_names:
+        i_loc = findLocationOrder(curAlt,location_objs,name)
+        print('name:',name,'i_loc:',i_loc)
+        if return_dss_paths:
+            lo1 = location_objs[i_loc]
+            print(lo1)
+            lts1 = curAlt.loadTimeSeries(lo1)
+            print(lts1.fullName)
+            tspath = str(lts1)
+            tspath = str(curAlt.loadTimeSeries(location_objs[i_loc]))
+            tspath = fixInputLocationFpart(curAlt, tspath)
+            locations_list.append(tspath)
+        else:
+            locations_list.append(location_objs[i_loc])
+    return locations_list
+
+
+def organizeLocationsPaired(curAlt, location_objs, loc_names_paired, return_dss_paths=False):   
+    return [organizeLocations(curAlt, location_objs, pn, return_dss_paths) for pn in loc_names_paired]
+
+
+def findLocationOrder(curAlt,location_objs,name):
+    for i,loc in enumerate(location_objs):
+        print(i,'Checking loc: ',loc.getName())
+        print('loc:',loc)
+        if name == loc.getName():
+            return i
+    # if we make it here, our input/output location name was not found
+    curAlt.addComputeMessage("Scripting - Location name not found: "+name)
+    sys.exit(1)
+
 def first_value(dss_file,dss_rec,start_str=None,end_str=None):
     dssFm = HecDss.open(dss_file)        
     if start_str is None and end_str is None:
@@ -24,6 +107,7 @@ def first_value(dss_file,dss_rec,start_str=None,end_str=None):
         tsc = dssFm.read(dss_rec,start_str,end_str,False).getData()
     dssFm.close()
     return tsc.values[0]
+
 
 def standardize_interval(tsm, interval, makePerAver=True):
     tsc = tsm.getData()
@@ -92,7 +176,25 @@ def shift_pit_river_time(input_dss_file,dss_rec,output_dss_file,out_rec,start_da
     dss_out = HecDss.open(output_dss_file)
     dss_out.put(tsc_pit)
     dss_out.close()
-    
+
+
+def shift_ts_time(input_dss_file,dss_rec,output_dss_file,out_rec,shift_str,start_date=None,end_date=None):
+    ''' important to not have dss_rec==out_rec, otherwise you will continually shift the record in time
+    whenever the calling script runs...
+
+    shift_str is HEC-known string, with a possible negative on the front. E.g., '-12Hour','5Day'...
+    '''  
+
+    tsm = dss_read_ts_safe(input_dss_file,dss_rec,start_date=start_date,end_date=end_date,returnTSM=True)
+
+    tsm = tsm.shiftInTime(shift_str)
+    tsc = tsm.getData()
+    tsc.fullName = out_rec  
+
+    dss_out = HecDss.open(output_dss_file)
+    dss_out.put(tsc)
+    dss_out.close()
+
 
 def dss_read_ts_safe(dssFilePath,dssRec,start_date=None,end_date=None,returnTSM=False,
                      returnPydatetimes=False,debug=False):
@@ -253,7 +355,7 @@ def add_DSS_Data(currentAlt, dssFile, timewindow, input_data, output_path):
     currentAlt.addComputeMessage("Number of Written values: {0}".format(len(output_data)))
     return 0
 
-def resample_dss_ts(inputDSSFile, inputRec, timewindow, outputDSSFile, newPeriod, lookback_1mon=False):
+def resample_dss_ts(inputDSSFile, inputRec, timewindow, outputDSSFile, newPeriod, lookback_1mon=False, pad_start_days=0):
     '''Can upsample an even period DSS timeseries, e.g. go from 1DAY -> 1HOUR, or downsample.  However, hecmath likes to
     clip of days that don't have the complete 24 hour cycle.  So, we pad here, but there is a chance we ask for data not
     available. The read gives garbage data and doesn't complain.  
@@ -266,6 +368,9 @@ def resample_dss_ts(inputDSSFile, inputRec, timewindow, outputDSSFile, newPeriod
         #if newPeriod.lower() == '1day':  # some computes don't end on 2400, causes problems when last day doesn't get produced in this func
         starttime_str = starttime_str[:-4] + '0000'
         endtime_str = endtime_str[:-4] + '2400' # clipped days don't work in computes ... hope the downloaded DMS data is long enough to do this.
+        if pad_start_days > 0:
+            dt_start = hec_str_time_to_dt(starttime_str) - datetime.timedelta(days=pad_start_days)
+            starttime_str = dt_start.strftime('%d%b%Y %H%M')
         if lookback_1mon:
             dt_start = hec_str_time_to_dt(starttime_str) - datetime.timedelta(days=-31)
             starttime_str = dt_start.strftime('%d%b%Y %H%M')      
@@ -418,7 +523,7 @@ def add_or_subtract_flows(currentAlt, timewindow, inflow_records, dss_file, oper
     #01Jan2014 0000
     starttime_hectime = HecTime(starttime_str).value()
     endtime_hectime = HecTime(endtime_str).value()
-    currentAlt.addComputeMessage('Looking from {0} to {1}'.format(starttime_str, endtime_str))
+    currentAlt.addComputeMessage('add_or_subtract_flows - Looking from {0} to {1}'.format(starttime_str, endtime_str))
     dssFm = HecDss.open(dss_file)
 
     inflows = []
@@ -619,6 +724,22 @@ def calculate_relative_humidity(air_temp, dewpoint_temp):
     relative_humidity = 100.0 * (numerator / denominator) * math.exp(exponent)
     return max(0.01, min(100.0, relative_humidity))
 
+def calculate_dewpoint(air_temp, relative_humidity):
+    """
+    Calculate Dew Point Temperature given the air temperature and relative humidity,
+    using the algebraic inversion of the simplified August-Roche-Magnus approximation.
+    
+    Parameters:
+        air_temp (float): Air temperature in C.
+        relative_humidity (float): Relative Humidity in percent (0-100).
+    
+    Returns:
+        float: Dew Point Temperature in C.
+    """
+    gamma = math.log(relative_humidity / 100.0) + (17.62 * air_temp) / (243.12 + air_temp)
+    dewpoint = 243.12 * gamma / (17.62 - gamma)
+    return dewpoint
+
 
 def relhum_from_at_dp(met_dss_file, at_path, dp_path):
     dss = HecDss.open(met_dss_file)
@@ -633,6 +754,25 @@ def relhum_from_at_dp(met_dss_file, at_path, dp_path):
     new_pathname = '/'.join(parts)
     tsc.fullName = new_pathname
     tsc.units = '%'
+    print('writing: ', new_pathname)
+    dss.write(tsc)
+    dss.close()
+
+
+def dp_from_at_relhum(met_dss_file, at_path, rh_path):
+    dss = HecDss.open(met_dss_file)
+    tsc = dss.read(at_path).getData()
+    rh_data = data_from_dss(met_dss_file, rh_path, None, None)
+    for i in range(tsc.numberValues):
+        #print('AT:',tsc.values[i], 'RH:',rh_data[i])
+        tsc.values[i] = calculate_dewpoint(tsc.values[i], rh_data[i])
+    parts = tsc.fullName.split('/')
+    parts[2] = parts[2][:5]
+    parts[3] = 'temp-dewpoint'
+    parts[6] = parts[6] + '-DERIVED'
+    new_pathname = '/'.join(parts)
+    tsc.fullName = new_pathname
+    #tsc.units = '%' - units should be C...
     print('writing: ', new_pathname)
     dss.write(tsc)
     dss.close()
@@ -735,7 +875,10 @@ def airtemp_lapse(dss_file,dss_rec,lapse_in_C,dss_outfile,f_part):
     dss_out.close()
 
 def preprend_first_value_on_ts(dss_file,dss_rec,prepend_n):
-    '''Sometimes ResSim needs some lookback values, or whatever'''
+    '''Sometimes ResSim needs some lookback values, or whatever
+    
+    Be careful that the first record is where you want to start - sometimes these things change
+    '''
     dss = HecDss.open(dss_file)
     tsc = dss.get(dss_rec,True)
 
@@ -749,4 +892,20 @@ def preprend_first_value_on_ts(dss_file,dss_rec,prepend_n):
 
     dss.put(tsc)
     dss.close()
-   
+
+def postprend_last_value_on_ts(dss_file,dss_rec,postpend_n):
+    '''Sometimes ResSim needs some lookback values, or whatever
+    has to be a 'regular' record'''
+    dss = HecDss.open(dss_file)
+    tsc = dss.get(dss_rec,True)
+
+    time_delta = tsc.times[1] - tsc.times[0]
+    times = [tsc.times[i] for i in range(len(tsc.times))] # convert to list - annoying
+    tsc.times = times + [times[-1] + time_delta*i for i in range(1,postpend_n+1)]
+    #tsc.startTime = tsc.times[0]
+    values = [tsc.values[i] for i in range(len(tsc.values))] # convert to list - annoying
+    tsc.values = values + [values[-1]]*postpend_n
+    tsc.numberValues = len(tsc.values)
+
+    dss.put(tsc)
+    dss.close()   

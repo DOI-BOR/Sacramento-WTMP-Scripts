@@ -31,9 +31,9 @@ output_names = [
 'WhiskeyTownTunnel_With_Heating'
 ]
 
-copy_to_resim_names = [
-'TargetTemp',
-]
+#copy_to_resim_names = [
+#'TargetTemp',
+#]
 
 ResSim_linked_rec = 'LEWISTON RESERVOIR-TUNNEL' # only used for get f part, could be any W2 output
 
@@ -62,7 +62,7 @@ def computeAlternative(currentAlternative, computeOptions):
 
     # this is choking on linked DSS data - can't get linking to pass in the right thing.  Hardcoding ressim_copy_paths
     #ressim_copy_paths = DSS_Tools.organizeLocations(currentAlternative, locations_obj, copy_to_resim_names, return_dss_paths=True)
-    ressim_copy_paths = ["/USBR/SHASTA/TEMP-WATER-TARGET//1Hour/SACTRN_BC_SCRIPT/",]
+    ressim_copy_paths = []
     
     output_paths = getOutputPaths(locations_paths,currentAlternative)
     

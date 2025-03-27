@@ -258,8 +258,20 @@ def compute_river_balance_flows(currentAlternative, rtw, hydro_dss, obs_dss_file
     DSS_Tools.resample_dss_ts(output_dss_file,out_rec,rtw,output_dss_file,'1DAY')
 
     # balance at Bend Bridge
-    DSS_Tools.resample_dss_ts(hydro_dss,'/MR Sac.-Keswick Res./KES-Dam Total Release/Flow//1Hour/234.1.125.1.1/',rtw,output_dss_file,'1DAY')
-    flow_records = [obs_dss_file + "::/USGS SACRAMENTO R/11377100 AB BEND BRDIGE/FLOW//1DAY/USGS/",
+    DSS_Tools.resample_dss_ts(hydro_dss,'/MR Sac.-Keswick Res./KES-Dam Total Release/Flow//1Hour/234.1.125.1.1/',rtw,output_dss_file,'1DAY',pad_start_days=1)
+    DSS_Tools.resample_dss_ts(hydro_dss,'/MR Sac.-Sac River/11377100 Sacramento R at Bend Bridge-15min Flow/Flow//15Minute/237.64.125.1.1/',rtw,output_dss_file,'1DAY',pad_start_days=1)
+
+    # bend bridge is pretty far downstream from the main release at Keswick - shifting backward by one day
+    # makes for a better balance
+    in_rec = '/MR Sac.-Sac River/11377100 Sacramento R at Bend Bridge-15min Flow/Flow//1Day/237.64.125.1.1/'
+    
+    # not using out_rec, time shifting is not working
+    out_rec = '/MR Sac.-Sac River/11377100 Sacramento R at Bend Bridge-15min Flow/Flow//1Day/237.64.125.1.1-1Day/'
+    DSS_Tools.shift_ts_time(output_dss_file,in_rec,output_dss_file,out_rec,'-1Day',start_date=None,end_date=None)    
+    DSS_Tools.postprend_last_value_on_ts(output_dss_file,out_rec,1)
+
+    #flow_records = [obs_dss_file + "::/USGS SACRAMENTO R/11377100 AB BEND BRDIGE/FLOW//1DAY/USGS/",
+    flow_records = [output_dss_file + "::" + in_rec,
                     obs_dss_file + "::/USGS CLEAR CR/11372000 NR IGO/FLOW//1DAY/USGS/",
                     "/MR Sac.-Sac River/11370700 ACID-Dly Flow/Flow//1Day/237.60.125.2.1/",
                     "/MR Sac.-Sac River/11374000 Cow Creek-Dly Flow/Flow//1Day/237.61.125.2.1/",
@@ -269,8 +281,7 @@ def compute_river_balance_flows(currentAlternative, rtw, hydro_dss, obs_dss_file
     out_rec = "/SACRAMENTO R/BEND BR BALANCE FLOW/FLOW//1DAY/ResSim_PreProcess/"
     DSS_Tools.add_or_subtract_flows(currentAlternative, rtw, flow_records, hydro_dss,
                               [True, False, False, False, False, False, False],
-                              out_rec, output_dss_file, what="flow",prepend_n=1)
-    
+                              out_rec, output_dss_file, what="flow",prepend_n=2)
 
 def compute_5Res_outflows(currentAlternative, rtw, hydro_dss, output_dss_file):
     # add PG flows 1-5 to create PG_SUM record used by ResSim/TCD scripts
@@ -708,8 +719,10 @@ def preprocess_ResSim_5Res(currentAlternative, computeOptions):
     DSS_Tools.relhum_from_at_dp(met_dss_file,
                       "/MR Sac.-Lewiston Res./TCAC1 - Calc Data-Air temperature/Temp-Air//1Hour/232.6.53.1.1/",
                       "/MR Sac.-Lewiston Res./TCAC1 - Calc Data-Dew Point/Temp-DewPoint//1Hour/232.6.51.1.1/")
-
-    
+    DSS_Tools.dp_from_at_relhum(met_dss_file,
+                      "/MR SAC.-CLEAR CR. TO SAC R./KRDD-AIR TEMPERATURE/TEMP-AIR//1Hour/Shasta_Lapse/",
+                      "/MR Sac.-Clear Cr. to Sac R./KRDD-/RELHUM-FROM-AT-DP//1Hour/235.40.53.1.1-DERIVED/")
+   
     
 
     return True

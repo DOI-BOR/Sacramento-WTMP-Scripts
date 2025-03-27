@@ -71,6 +71,13 @@ def computeAlternative(currentAlternative, computeOptions):
     units = base_TS.units
     dsstype = base_TS.type
 
+    # we rely here on the input from W2 Whisketytown and the debris dam flow from the DMS, which might be in
+    # different units
+
+    cms2cfs_base = 1.0
+    if str(units).lower() == 'cms':
+        cms2cfs_base = 35.314666212661
+
     for other_loc in locations[1:2]:
         new_values = []
         other_tspath, other_DSSPath = DSS_Tools.getDataLocationDSSInfo(other_loc, currentAlternative, computeOptions)
@@ -80,10 +87,15 @@ def computeAlternative(currentAlternative, computeOptions):
         other_TS = dss_other.read(other_tspath, starttime_str, endtime_str, False)
         dss_other.close()
         other_TS = other_TS.getData()
+
+        cms2cfs_other = 1.0
+        if str(other_TS.units).lower() == 'cms':
+            cms2cfs_other = 35.314666212661
+        
         other_values = other_TS.values
         for vi, val in enumerate(all_values):
             try:
-                new_values.append(val + other_values[vi])
+                new_values.append(val*cms2cfs_base + other_values[vi]*cms2cfs_other)
             except:
                 currentAlternative.addComputeMessage("No value for location {0} at idx {1} {2}".format(other_loc, vi, hecstarttimes[vi]))
                 new_values.append(MISSING_DOUBLE)
@@ -96,7 +108,7 @@ def computeAlternative(currentAlternative, computeOptions):
     tsc.fullName = outputpath
     tsc.values = all_values
     tsc.startTime = hecstarttimes[0]
-    tsc.units = units
+    tsc.units = 'cfs'
     tsc.type = dsstype
     tsc.endTime = hecstarttimes[-1]
     tsc.numberValues = len(all_values)
