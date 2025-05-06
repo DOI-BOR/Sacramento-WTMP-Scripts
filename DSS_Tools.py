@@ -18,7 +18,7 @@ from hec.heclib.util import HecTime
 
 
 def copy_dss_ts(dss_rec,new_fpart=None,new_dss_rec=None,
-                dss_file_path=None,dss_file_handle=None):
+                dss_file_path=None,dss_file_handle=None,dss_file_alt_outpath=None):
 
        # error check inputs - there are flexible way to copy record
     if dss_file_path is None and dss_file_handle is None:
@@ -29,15 +29,19 @@ def copy_dss_ts(dss_rec,new_fpart=None,new_dss_rec=None,
     # (open dss) get record tsc
     if dss_file_handle is not None:
         dss_fm = dss_file_handle
+        print('copy_dss_ts - reading input from open file:',dss_rec)
     else:
-         dss_fm = HecDss.open(dss_file_path)
+        dss_fm = HecDss.open(dss_file_path)
+        print('copy_dss_ts - reading input:',dss_file_path,dss_rec)
     tsc = dss_fm.get(dss_rec,True)
+    print('tsc.fullName',tsc.fullName)
 
     # new dss rec name
     if new_dss_rec is not None:
         dss_rec_out = new_dss_rec
     else:
         rec_parts = tsc.fullName.split('/')
+        print(rec_parts)
         rec_parts[6] = new_fpart
         dss_rec_out = '/'.join(rec_parts)    
 
@@ -49,7 +53,12 @@ def copy_dss_ts(dss_rec,new_fpart=None,new_dss_rec=None,
 
     # write
     tsc.fullName = dss_rec_out
-    dss_fm.put(tsc)
+    if dss_file_alt_outpath is not None:
+        dss_fm_alt = HecDss.open(dss_file_alt_outpath)
+        dss_fm_alt.put(tsc)
+        dss_fm_alt.close()
+    else:
+        dss_fm.put(tsc)
 
     if dss_file_handle is None:
         dss_fm.close()
@@ -74,11 +83,12 @@ def organizeLocations(curAlt, location_objs, loc_names, return_dss_paths=False):
         if return_dss_paths:
             lo1 = location_objs[i_loc]
             print(lo1)
-            lts1 = curAlt.loadTimeSeries(lo1)
-            print(lts1.fullName)
-            tspath = str(lts1)
-            tspath = str(curAlt.loadTimeSeries(location_objs[i_loc]))
-            tspath = fixInputLocationFpart(curAlt, tspath)
+            if lo1.isLinkedToPreviousModel():
+                tspath = str(curAlt.loadTimeSeries(lo1))
+                tspath = fixInputLocationFpart(curAlt, tspath)
+            else:
+                tspath = str(lo1.getDssPath())
+            print(tspath)
             locations_list.append(tspath)
         else:
             locations_list.append(location_objs[i_loc])

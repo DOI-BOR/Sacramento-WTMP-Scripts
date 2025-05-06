@@ -150,9 +150,6 @@ def computeAlternative(currentAlternative, computeOptions):
 
     currentAlternative.addComputeMessage("Outputting to {0}".format(outputpath))
 
-    #heat in C
-    monthly_heating = {1: 0.81, 2: 0.71, 3: 0.74, 4: 0.73, 5: 0.93, 6: 0.71, 7: 0.75, 8: 0.74, 9: 0.76, 10: 0.68, 11: 0.77, 12: 0.82}
-
     currentAlternative.addComputeMessage("\n##### PERFORMING HEATING #####")
     starttime_str = rtw.getStartTimeString()
     endtime_str = rtw.getEndTimeString()
