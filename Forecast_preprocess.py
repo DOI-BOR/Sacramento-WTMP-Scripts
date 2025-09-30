@@ -4,6 +4,7 @@ from hec.heclib.util.Heclib import UNDEFINED_DOUBLE
 from hec.heclib.util import HecTime
 from hec.io import DSSIdentifier
 from hec.io import TimeSeriesContainer
+from hec.io import DataContainer
 import hec.hecmath.TimeSeriesMath as tsmath
 from rma.util.RMAConst import MISSING_DOUBLE
 import math
@@ -330,19 +331,21 @@ def forecast_data_preprocess_ResSim_5Res(currentAlternative, computeOptions):
     DSS_Tools.resample_dss_ts(forecast_dss,'//SHASTA/FLOW-RELEASE-KESWICK-CFS//1Hour/SACTRN_BC_SCRIPT/',rtw,forecast_dss,'1DAY',pad_start_days=1)
     DSS_Tools.resample_dss_ts(forecast_dss,'/USBR/SHASTA/TEMP-WATER-TARGET//1Hour/SACTRN_BC_SCRIPT/',rtw,forecast_dss,'1DAY')
 
-    location = 2
+    # read location from DSS
+    location = get_downstream_loc(forecast_dss)
+
     TT_rec = "/USBR/SHASTA/TEMP-WATER-TARGET//1Day/SACTRN_BC_SCRIPT/"
     TT_W2_rec = "/USBR/SHASTA/TEMP-WATER-TARGET-W2-UPSTREAM//1Day/SACTRN_BC_SCRIPT/"
     if location == 0: 
         # @ Shasta Dam, use exact TT
-        DSS_tools.copy_dss_ts(TT_rec,new_dss_rec=TT_W2_rec,dss_file_path=forecast_dss)
+        DSS_Tools.copy_dss_ts(TT_rec,new_dss_rec=TT_W2_rec,dss_file_path=forecast_dss,checkMakeCelsius=True)
     else:
         upstream_target(forecast_dss,rtw,
                         "/USBR/SHASTA/TEMP-WATER-TARGET//1Day/SACTRN_BC_SCRIPT/",
                         "/MR Sac.-Clear Cr. to Sac R./KRDD/Temp-Equil//1Day/sactrn_bc_script/",
                         "//SHASTA/FLOW-RELEASE-KESWICK-CFS//1Day/SACTRN_BC_SCRIPT/",
                         "/CLEAR CREEK/WHISKEYTOWN LAKE/FLOW-DIVERSION-SPRING-CR//1Day/SACTRN_BC_SCRIPT/",
-                        location,TT_W2_rec,ResSimRiver=True)
+                        location,TT_W2_rec,ResSimRiver=False)
     
     return True
 
@@ -561,6 +564,11 @@ def upstream_target(forecastDSS,rtw,downstreamTT_rec,eqTemp_rec,kesFlow_rec,sppF
     tsc_int_times = tsc.times
     dtt = DSS_Tools.hectime_to_datetime(tsc)
     downstreamTT = tsc.values
+    TT_units = str(tsc.units)
+    if TT_units.lower() == 'f' or TT_units.lower() == 'degF':
+        for i, TT in enumerate(downstreamTT):
+            downstreamTT[i] = (TT-32.0)*5.0/9.0
+        tsc.units = 'C'    
     dssFm.close()
     # get the rest of the data over the same period
     eqTemp = DSS_Tools.data_from_dss(forecastDSS,eqTemp_rec,starttime_str,endtime_str)
@@ -608,6 +616,13 @@ def upstream_target(forecastDSS,rtw,downstreamTT_rec,eqTemp_rec,kesFlow_rec,sppF
     dssFmRec.write(tsc)
     dssFmRec.close()
 
+def get_downstream_loc(forecastDSS):
+    dssFm = HecDss.open(forecastDSS)        
+    tsc = dssFm.get('//DOWNSTREAM_CONTROL_LOC///INTEGER/SACTRN_TARGET_TEMP/', True) # this should be passed in a linked record at some point
+    loc = int(str(tsc.getText()).strip())
+    print('Downstream Loc: ',str(tsc))
+    dssFm.close()
+    return loc
 
 def forecast_data_preprocess_W2_5Res(currentAlternative, computeOptions):
     dss_file = computeOptions.getDssFilename()
@@ -625,6 +640,17 @@ def forecast_data_preprocess_W2_5Res(currentAlternative, computeOptions):
     DMS_preprocess.fix_DMS_types_units(forecast_dss)
     
     splice_met(currentAlternative, rtw, forecast_dss, forecast_dss)
+
+    currentAlternative.addComputeMessage("Computing equilibrium temperature, this may take a while...")
+    # eq_temp(rtw,at,cl,ws,sr,td,eq_temp_out)
+    eq_temp(rtw,
+            [forecast_dss,"/MR Sac.-Clear Cr. to Sac R./KRDD/Temp-Air//1Hour/SACTRN_BC_SCRIPT/"],
+            [forecast_dss,"/MR Sac.-Clear Cr. to Sac R./RRAC1/%-Cloud Cover-FRAC//1Hour/SACTRN_BC_SCRIPT/"],
+            [forecast_dss,"/MR Sac.-Clear Cr. to Sac R./KRDD/Speed-Wind//1Hour/SACTRN_BC_SCRIPT/"],
+            [forecast_dss,"/MR SAC.-CLEAR CR. TO SAC R./RRAC1/IRRAD-SOLAR//1HOUR/SACTRN_BC_SCRIPT/"],
+            [forecast_dss,"/MR Sac.-Clear Cr. to Sac R./KRDD/Temp-DewPoint//1Hour/SACTRN_BC_SCRIPT/"],
+            [forecast_dss,"/MR Sac.-Clear Cr. to Sac R./KRDD/Temp-Equil//1Hour/sactrn_bc_script/"]
+           )
 
     write_forecast_elevations(currentAlternative, rtw, forecast_dss, shared_dir)
 
@@ -645,14 +671,14 @@ def forecast_data_preprocess_W2_5Res(currentAlternative, computeOptions):
     DSS_Tools.resample_dss_ts(forecast_dss,'//SHASTA/FLOW-RELEASE-KESWICK-CFS//1Hour/SACTRN_BC_SCRIPT/',rtw,forecast_dss,'1DAY',pad_start_days=1)
     DSS_Tools.resample_dss_ts(forecast_dss,'/USBR/SHASTA/TEMP-WATER-TARGET//1Hour/SACTRN_BC_SCRIPT/',rtw,forecast_dss,'1DAY')
 
-    # read location form DSS somehow?
-    location = 2 
+    # read location from DSS
+    location = get_downstream_loc(forecast_dss)
 
     TT_rec = "/USBR/SHASTA/TEMP-WATER-TARGET//1Day/SACTRN_BC_SCRIPT/"
     TT_W2_rec = "/USBR/SHASTA/TEMP-WATER-TARGET-W2-UPSTREAM//1Day/SACTRN_BC_SCRIPT/"
     if location == 0: 
         # @ Shasta Dam, use exact TT
-        DSS_tools.copy_dss_ts(TT_rec,new_dss_rec=TT_W2_rec,dss_file_path=forecast_dss)
+        DSS_Tools.copy_dss_ts(TT_rec,new_dss_rec=TT_W2_rec,dss_file_path=forecast_dss,checkMakeCelsius=True)
     else:
         upstream_target(forecast_dss,rtw,
                         "/USBR/SHASTA/TEMP-WATER-TARGET//1Day/SACTRN_BC_SCRIPT/",
@@ -661,7 +687,4 @@ def forecast_data_preprocess_W2_5Res(currentAlternative, computeOptions):
                         "/CLEAR CREEK/WHISKEYTOWN LAKE/FLOW-DIVERSION-SPRING-CR//1Day/SACTRN_BC_SCRIPT/",
                         location,TT_W2_rec,ResSimRiver=False)
     
-    
-
-    # TODO: Generate Flow records needed for plotting
     return True

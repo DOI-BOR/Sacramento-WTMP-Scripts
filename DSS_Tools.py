@@ -18,7 +18,7 @@ from hec.heclib.util import HecTime
 
 
 def copy_dss_ts(dss_rec,new_fpart=None,new_dss_rec=None,
-                dss_file_path=None,dss_file_handle=None,dss_file_alt_outpath=None):
+                dss_file_path=None,dss_file_handle=None,dss_file_alt_outpath=None, checkMakeCelsius=False):
 
        # error check inputs - there are flexible way to copy record
     if dss_file_path is None and dss_file_handle is None:
@@ -51,6 +51,13 @@ def copy_dss_ts(dss_rec,new_fpart=None,new_dss_rec=None,
     elif tsc.units.lower() == 'degf':
         tsc.units = 'F'
 
+    if tsc.units.lower() == 'f' and checkMakeCelsius:
+        T_values = tsc.values
+        for i, TT in enumerate(T_values):
+            T_values[i] = (TT-32.0)*5.0/9.0
+        tsc.units = 'C'
+        tsc.values = T_values
+        
     # write
     tsc.fullName = dss_rec_out
     if dss_file_alt_outpath is not None:
