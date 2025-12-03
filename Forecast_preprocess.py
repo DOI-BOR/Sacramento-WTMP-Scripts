@@ -15,7 +15,6 @@ import os, sys, csv, calendar
 from com.rma.io import DssFileManagerImpl
 from com.rma.model import Project
 #import hec.hecmath.TimeSeriesMath as tsmath
-sys.path.append(os.path.join(Project.getCurrentProject().getWorkspacePath(), "scripts"))
 
 import DSS_Tools
 reload(DSS_Tools)
