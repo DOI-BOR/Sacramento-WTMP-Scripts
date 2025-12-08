@@ -7,7 +7,7 @@ from com.rma.model import Project
 print("Current paths: ", sys.path)
 
 # create list of unwanted folders in sys.path
-search_list = ["SacTrn", "Sacramento", "American"]
+search_list = ["SacTrn", "Sacramento", "American", "Stanislaus"]
 
 # initialize and search for unwanted paths
 matching_paths = []
