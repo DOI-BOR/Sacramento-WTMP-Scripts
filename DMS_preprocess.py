@@ -16,6 +16,8 @@ from com.rma.io import DssFileManagerImpl
 from com.rma.model import Project
 #import hec.hecmath.TimeSeriesMath as tsmath
 
+sys.path.append(os.path.join(Project.getCurrentProject().getWorkspacePath(), "scripts"))
+
 from com.rma.io import DssFileManagerImpl
 from java.util import TimeZone
 
@@ -633,6 +635,9 @@ def preprocess_W2_5Res(currentAlternative, computeOptions):
     met_dss_file = os.path.join(shared_dir,'DMS_SacTrnMet.dss')
     fix_DMS_types_units(met_dss_file)
 
+    # ressim can't handle different units under model linking
+    standardize_bc_temp_water_to_C(hydro_dss,output_dss_file)
+
     DSS_Tools.create_constant_dss_rec(currentAlternative, rtw, output_dss_file, constant=0.001, what='flow', 
                         dss_type='PER-AVER', period='1DAY',cpart='TinyFlow',fpart='TinyFlow')
     DSS_Tools.create_constant_dss_rec(currentAlternative, rtw, output_dss_file, constant=0.001, what='flow', 
@@ -675,8 +680,7 @@ def preprocess_ResSim_5Res(currentAlternative, computeOptions):
     fix_DMS_types_units(hydro_dss)
     met_dss_file = os.path.join(shared_dir,'DMS_SacTrnMet.dss')
     fix_DMS_types_units(met_dss_file)
-    # ressim can't handle different units under model linking
-    standardize_bc_temp_water_to_C(hydro_dss,output_dss_file)
+    
 
     DSS_Tools.create_constant_dss_rec(currentAlternative, rtw, output_dss_file, constant=0.0, what='flow', 
                         dss_type='PER-AVER', period='1DAY',cpart='ZEROS',fpart='ZEROS')
