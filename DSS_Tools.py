@@ -10,8 +10,89 @@ for the Sacramento WTMP workflow. It includes:
 - Convenience functions for path manipulation and alternative-based resolution.
 
 
-Notes
------
+# --- Utility Function for Python 2 timedelta.total_seconds() ---
+# In Python 2, timedelta objects don't always have total_seconds(), so
+# we implement it manually to ensure cross-version compatibility for float division.
+def _timedelta_to_seconds(td):
+    """
+    Converts a datetime.timedelta object to a floating-point number of seconds.
+    This ensures proper float division for time ratios in Python 2.
+    """
+    # 86400 seconds in a day (24 * 60 * 60)
+    # 1,000,000 microseconds in a second
+    return td.days * 86400.0 + td.seconds + td.microseconds / 1000000.0
+
+# --- Main Interpolation Method ---
+def linear_interp_datetime(time_data, value_data, query_times):
+    """
+    Performs linear interpolation on time-series data.
+
+    Arguments:
+    - time_data: List of ordered (ascending) datetime.datetime objects (X-axis).
+    - value_data: List of float values corresponding to time_data (Y-axis).
+    - query_times: List of datetime.datetime objects for which to interpolate values.
+
+    Returns:
+    - A list of interpolated float values corresponding to query_times.
+    """
+    # 1. Basic Validation
+    if len(time_data) != len(value_data) or len(time_data) < 2:
+        print "Error: time_data and value_data must have the same length (and at least 2 points)."
+        return []
+
+    # 2. Normalize Times to Numerical Values (Seconds from the first timestamp)
+    # Using the first time point (t0) as the numerical zero reference (x_data[0] = 0.0)
+    t0 = time_data[0]
+    x_data = []
+    for t in time_data:
+        x_data.append(_timedelta_to_seconds(t - t0))
+
+    x_query = []
+    for t in query_times:
+        x_query.append(_timedelta_to_seconds(t - t0))
+
+    # 3. Perform Interpolation / Extrapolation
+    results = []
+    n = len(x_data)
+
+    for x in x_query:
+        # A. Extrapolation: Before the first data point
+        if x <= x_data[0]:
+            # Use the closest float value (the first value)
+            results.append(value_data[0])
+            continue
+
+        # B. Extrapolation: After the last data point
+        if x >= x_data[n - 1]:
+            # Use the closest float value (the last value)
+            results.append(value_data[n - 1])
+            continue
+
+        # C. Interpolation: Find the interval [x_data[i], x_data[i+1]]
+        # We search for the index 'i' such that x_data[i] <= x < x_data[i+1]
+        i = 0
+        while i < n - 1 and x >= x_data[i + 1]:
+            i += 1
+
+        # Define the segment (x0, y0) and (x1, y1)
+        x0, y0 = x_data[i], value_data[i]
+        x1, y1 = x_data[i + 1], value_data[i + 1]
+
+        # Check for zero duration (in case of duplicate timestamps in time_data)
+        dx = x1 - x0
+        if dx == 0.0:
+            y = y0
+        else:
+            # Linear interpolation formula: y = y0 + (y1 - y0) * (x - x0) / (x1 - x0)
+            y = y0 + (y1 - y0) * (x - x0) / dx
+
+        results.append(y)
+
+    return results
+
+
+def copy_dss_ts(dss_rec,new_fpart=None,new_dss_rec=None,
+                dss_file_path=None,dss_file_handle=None,dss_file_alt_outpath=None, checkMakeCelsius=False):
 
 - Several helpers reference HEC Java APIs accessed via Jython. These calls
   assume the HEC-WAT environment is available at runtime.
@@ -959,6 +1040,37 @@ def hec_str_time_to_dt(hec_str_time, longStr=False):
     # Return the jython timestamp
     return dt 
 
+
+def hecTime_to_datetime(hectimes):
+    return [hec_str_time_to_dt(h.toString(),longStr=True) for h in hectimes]
+
+def datetimes_from_tsc(tsc):
+    return hecTime_to_datetime(hectimes_from_tsc(tsc))
+
+def hec_str_time_to_dt(hec_str_time,longStr=False):
+    '''Convert HEC date time format to python datetime object'''
+
+    add_day = False
+    if longStr:
+        dt_format = "%d %B %Y, %H:%M"
+        check24 = '24:00'
+        check00 = '00:00'
+    else:
+        dt_format = '%d%b%Y %H%M'
+        check24 = '2400'
+        check00 = '0000'
+
+    checkLen = len(check24)*(-1)
+    if hec_str_time.endswith(check24):
+        my_hec_str_time = hec_str_time[:checkLen] + check00
+        add_day = True
+    else:
+        my_hec_str_time = hec_str_time
+
+    dt = datetime.datetime.strptime(my_hec_str_time,dt_format)
+    if add_day:
+        dt = dt + datetime.timedelta(days=1)
+    return dt
 
 def fixInputLocationFpart(currentAlternative, tspath):
     """

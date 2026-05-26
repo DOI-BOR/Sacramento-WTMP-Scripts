@@ -76,7 +76,6 @@ reload(DSS_Tools)                                      # Reload to pick up recen
 # Units that need conversion/standardization for model linking
 units_need_fixing = ['tenths','deg','kph'] #'radians',]  # 'radians' handled in legacy function below
 
-
 def fix_DMS_types_units(dss_file):
     """
     Standardize DMS record types/units in-place. This method was implemented to change data types to PER-AVER that 
