@@ -15,6 +15,7 @@ import os, sys, csv, calendar
 from com.rma.io import DssFileManagerImpl
 from com.rma.model import Project
 #import hec.hecmath.TimeSeriesMath as tsmath
+sys.path.append(os.path.join(Project.getCurrentProject().getWorkspacePath(), "scripts"))
 
 # print current path
 print("Current paths: ", sys.path)
@@ -589,7 +590,7 @@ def upstream_target(forecastDSS,rtw,downstreamTT_rec,eqTemp_rec,kesFlow_rec,sppF
     dtt = DSS_Tools.hectime_to_datetime(tsc)
     downstreamTT = tsc.values
     TT_units = str(tsc.units)
-    if TT_units.lower() == 'f' or TT_units.lower() == 'degF':
+    if TT_units.lower() == 'f' or TT_units.lower() == 'degf':
         for i, TT in enumerate(downstreamTT):
             downstreamTT[i] = (TT-32.0)*5.0/9.0
         tsc.units = 'C'    
@@ -700,9 +701,11 @@ def forecast_data_preprocess_W2_5Res(currentAlternative, computeOptions):
 
     TT_rec = "/USBR/SHASTA/TEMP-WATER-TARGET//1Day/SACTRN_BC_SCRIPT/"
     TT_W2_rec = "/USBR/SHASTA/TEMP-WATER-TARGET-W2-UPSTREAM//1Day/SACTRN_BC_SCRIPT/"
+    
     if location == 0: 
         # @ Shasta Dam, use exact TT
         DSS_Tools.copy_dss_ts(TT_rec,new_dss_rec=TT_W2_rec,dss_file_path=forecast_dss,checkMakeCelsius=True)
+		
     else:
         upstream_target(forecast_dss,rtw,
                         "/USBR/SHASTA/TEMP-WATER-TARGET//1Day/SACTRN_BC_SCRIPT/",

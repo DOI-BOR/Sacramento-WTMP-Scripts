@@ -127,12 +127,12 @@ def copy_dss_ts(dss_rec,new_fpart=None,new_dss_rec=None,
         dss_rec_out = '/'.join(rec_parts)    
 
     # fix some terrible units along the way
-    if tsc.units.lower() == 'degc':
+    if tsc.units.lower() in ('degc','c'):
         tsc.units = 'C'
-    elif tsc.units.lower() == 'degf':
+    elif tsc.units.lower() in ('degf','f'):
         tsc.units = 'F'
-
-    if tsc.units.lower() == 'f' and checkMakeCelsius:
+	
+    if tsc.units.lower() in ('f','degf') or checkMakeCelsius:
         T_values = tsc.values
         for i, TT in enumerate(T_values):
             T_values[i] = (TT-32.0)*5.0/9.0
