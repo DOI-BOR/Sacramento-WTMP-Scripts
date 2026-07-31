@@ -36,7 +36,17 @@ def fixFpartToInput(inputpath, outpath):
 def computeAlternative(currentAlternative, computeOptions):
     currentAlternative.addComputeMessage("Computing ScriptingAlternative:" + currentAlternative.getName() )
  
-    locations = currentAlternative.getInputDataLocations()[:-1]
+    all_locations = currentAlternative.getInputDataLocations()
+    locations = []
+    clear_creek_locations = []
+
+    # sort into clear creek (seg 111) and the rest
+    for location in all_locations:
+        if '111' in str(location):
+            clear_creek_locations.append(location)
+        else:
+            locations.append(location)
+
     locations = flowweightaverage.organizeLocations(currentAlternative, locations)
     currentAlternative.addComputeMessage('Found DSS paths:')
     for location in locations:
@@ -86,33 +96,36 @@ def computeAlternative(currentAlternative, computeOptions):
     # Add tunnel heating to Clear Creek tunnel temperatures
     # ------------------------------------------------------------------------------------ 
 
-    locations = currentAlternative.getInputDataLocations()
-    #if len(locations) > 1:
-    #    currentAlternative.addComputeMessage("Found more than 1 datapath locations. Using the first, {0}".format(outputlocations[0]))
-    #elif len(locations) == 0:
-    #    currentAlternative.addComputeMessage("Found no datapath locations. Exiting.")
-    #    sys.exit(1)
-    
-    ClearCreek = locations[-1]
-   
-    tspath =str(currentAlternative.loadTimeSeries(ClearCreek))
-    tspath = DSS_Tools.fixInputLocationFpart(currentAlternative, tspath)
-            
-    currentAlternative.addComputeMessage('Found DSS path: {0}'.format(tspath))
-    
+    # we should have a flow and a temperature clear creek path, separate them
+    if 'Flow' in str(clear_creek_locations[1]):
+        ClearCreek_flow = clear_creek_locations[1]
+        ClearCreek_temperature = clear_creek_locations[0]
+    else:
+        ClearCreek_flow = clear_creek_locations[0]
+        ClearCreek_temperature = clear_creek_locations[1]
+
+    # get the paths from the locations
+    tspath_temperature =str(currentAlternative.loadTimeSeries(ClearCreek_temperature))
+    tspath_temperature = DSS_Tools.fixInputLocationFpart(currentAlternative, tspath_temperature)
+    tspath_flow = str(currentAlternative.loadTimeSeries(ClearCreek_flow))
+    tspath_flow = DSS_Tools.fixInputLocationFpart(currentAlternative, tspath_flow)
+
+    currentAlternative.addComputeMessage('Found DSS path: {0}'.format(tspath_temperature))
+    currentAlternative.addComputeMessage('Found DSS path: {0}'.format(tspath_flow))
+
     currentAlternative.addComputeMessage('\n')
     dssFile = computeOptions.getDssFilename()
     rtw = computeOptions.getRunTimeWindow()
 
-    # second outpath is CC tuneel w/ heating
+    # get the temp and flow clear creek output paths
     outputlocations = currentAlternative.getOutputDataLocations()
-    outputpath = currentAlternative.createOutputTimeSeries(outputlocations[1])
-    
-    #if len(outputlocations) > 1:
-    #    currentAlternative.addComputeMessage("Found more than 1 output datapath locations. Using the first, {0}".format(outputlocations[0]))
-    outputpath = DSS_Tools.fixInputLocationFpart(currentAlternative, str(outputpath))
+    outputpath_temperature, outputpath_flow= DSS_Tools.organizeLocations(currentAlternative, outputlocations, ['ClearCreek_heated', 'ClearCreek_flow'], return_dss_paths=True)
 
-    currentAlternative.addComputeMessage("Outputting to {0}".format(outputpath))
+    outputpath_temperature = DSS_Tools.fixInputLocationFpart(currentAlternative, str(outputpath_temperature))
+    outputpath_flow = DSS_Tools.fixInputLocationFpart(currentAlternative, str(outputpath_flow))
+
+    currentAlternative.addComputeMessage("Outputting to {0}".format(outputpath_temperature))
+    currentAlternative.addComputeMessage("Outputting to {0}".format(outputpath_flow))
 
     #heat in C
     monthly_heating = {1: 0.81, 2: 0.71, 3: 0.74, 4: 0.73, 5: 0.93, 6: 0.71, 7: 0.75, 8: 0.74, 9: 0.76, 10: 0.68, 11: 0.77, 12: 0.82}
@@ -122,12 +135,16 @@ def computeAlternative(currentAlternative, computeOptions):
     endtime_str = rtw.getEndTimeString()
     currentAlternative.addComputeMessage('Looking from {0} to {1}'.format(starttime_str, endtime_str))
     dssFm = HecDss.open(dssFile)
-    TS = dssFm.read(tspath, starttime_str, endtime_str, False)
-    TS = TS.getData()
-    hecstarttimes = TS.times
+
+    # read temperature data
+    ts_temperature = dssFm.read(tspath_temperature, starttime_str, endtime_str, False)
+    ts_temperature = ts_temperature.getData()
+    hecstarttimes = ts_temperature.times
     readabledates = []
-    for i in range(len(TS.times)):
-        hecdate = TS.getHecTime(i).dateAndTime(4) #delete later
+
+    # get timeseries times
+    for i in range(len(ts_temperature.times)):
+        hecdate = ts_temperature.getHecTime(i).dateAndTime(4) #delete later
         if hecdate.split(':')[0][-2:] == '24':
             hecdate = hecdate.split(',')[0] + ', 23:00'
             dthecdate = dt.datetime.strptime(hecdate, '%d%b%Y, %H:%M') #31Dec2018, 24:00
@@ -135,20 +152,35 @@ def computeAlternative(currentAlternative, computeOptions):
         else:
             dthecdate = dt.datetime.strptime(hecdate, '%d%b%Y, %H:%M') #31Dec2018, 24:00
         readabledates.append(dthecdate)
-        
+
+    # read flow data
+    ts_flow = dssFm.read(tspath_flow, starttime_str, endtime_str, False)
+    ts_flow = ts_flow.getData()
+
     new_values = []
-    for vi, val in enumerate(TS.values):
-        valmonth = readabledates[vi].month
-        heat_amount_c = monthly_heating[valmonth]
-        new_values.append(val + heat_amount_c)
-        
+    flow_values = []
+
+    for vi, val in enumerate(ts_temperature.values):
+
+        # if the temperature value is missing it will be a very negative number
+        # detect this and set temperature and flow to zero
+        if val <= -100:
+            new_values.append(0)
+            flow_values.append(0)
+        else:
+            valmonth = readabledates[vi].month
+            heat_amount_c = monthly_heating[valmonth]
+            new_values.append(val + heat_amount_c)
+            flow_values.append(ts_flow.values[vi])
+
+    # write temperature data
     tsc = TimeSeriesContainer()
     tsc.times = hecstarttimes
-    tsc.fullName = outputpath
+    tsc.fullName = outputpath_temperature
     tsc.values = new_values
     tsc.startTime = hecstarttimes[0]
-    tsc.units = TS.units
-    tsc.type = TS.type
+    tsc.units = ts_temperature.units
+    tsc.type = ts_temperature.type
     tsc.endTime = hecstarttimes[-1]
     tsc.numberValues = len(new_values)
     tsc.startHecTime = rtw.getStartTime()
@@ -157,11 +189,31 @@ def computeAlternative(currentAlternative, computeOptions):
 
     # write a copy out using the input model f-part, so that plotting will be able to use it with the input model
     #currentAlternative.addComputeMessage("Len of locations: {0}".format(len(locations)))
-    tsc.fullName = fixFpartToInput(tspath, str(outputpath))
+    tsc.fullName = fixFpartToInput(tspath_temperature, str(outputpath_temperature))
     dssFm.write(tsc)
-        
-    dssFm.close()
     currentAlternative.addComputeMessage("Number of Written values: {0}".format(len(new_values)))
+
+    # same for flow data
+    tsc_flow = TimeSeriesContainer()
+    tsc_flow.times = hecstarttimes
+    tsc_flow.fullName = outputpath_flow
+    tsc_flow.values = flow_values
+    tsc_flow.startTime = hecstarttimes[0]
+    tsc_flow.units = ts_flow.units
+    tsc_flow.type = ts_flow.type
+    tsc_flow.endTime = hecstarttimes[-1]
+    tsc_flow.numberValues = len(flow_values)
+    tsc_flow.startHecTime = rtw.getStartTime()
+    tsc_flow.endHecTime = rtw.getEndTime()
+    dssFm.write(tsc_flow)
+
+    # write a copy out using the input model f-part, so that plotting will be able to use it with the input model
+    # currentAlternative.addComputeMessage("Len of locations: {0}".format(len(locations)))
+    tsc_flow.fullName = fixFpartToInput(tspath_flow, str(outputpath_flow))
+    dssFm.write(tsc_flow)
+
+    dssFm.close()
+    currentAlternative.addComputeMessage("Number of Written values: {0}".format(len(flow_values)))
 
     # exit
     return True
