@@ -1,8 +1,27 @@
+"""
+Pre-Process_W2_5-Res_Prescribed_SacTrn
+========================================
+
+Compute a WAT Scripting Alternative that prepares the prescribed CE-QUAL-W2
+5-reservoir Sacramento-Trinity model runs by copying the correct
+year-specific annual configuration input files into each W2 model's working
+directory, then runs the shared DMS preprocessing step.
+
+This is functionally identical to `Pre-Process_W2_5-Res_Prescribed_V45_SacTrn.py`,
+except it does not include the 'W2 Keswick Prescribed v45' model variant in
+`W2_models_for_input_copy`.
+
+Notes
+-----
+- **Environment:** Jython (Python 2.7 semantics) within HEC-WAT.
+- **Dependencies:** `os`, `time`, `sys`, `distutils.dir_util.copy_tree`,
+  `com.rma.model.Project`, `DMS_preprocess`.
+"""
 
 #from com.rma.io import DssFileManagerImpl
-import os,time,sys#,shutil
-from distutils.dir_util import copy_tree
-from com.rma.model import Project
+import os,time,sys#,shutil                            # Standard library: filesystem ops, timing, sys.path manipulation
+from distutils.dir_util import copy_tree              # Recursive directory copy utility, used to stage annual W2 inputs
+from com.rma.model import Project                     # WAT project API: resolve workspace path for scripts folder
 # print current path
 print("Current paths: ", sys.path)
 
@@ -28,13 +47,36 @@ for path in matching_paths:
 # append path
 sys.path.append(os.path.join(Project.getCurrentProject().getWorkspacePath(), "scripts"))
 
-import DMS_preprocess
-reload(DMS_preprocess)
+import DMS_preprocess                                  # Local module: DMS unit/type standardization and 5-reservoir W2 preprocessing
+reload(DMS_preprocess)                                 # Jython: ensure latest version is loaded
 
+# list of prescribed W2 model alternatives that need their annual input
 W2_models_for_input_copy = ['W2 Trinity Prescribed','W2 Lewiston Prescribed','W2 Whiskeytown Prescribed',
                             'W2 Shasta Prescribed','W2 Keswick Prescribed']
 
 def backdate_W2_files_to_skip_compute(run_dir):
+    """
+    Backdate all W2 model files in the study's cequal-w2 folder so
+    that W2 treats them as unchanged and skips recomputation.
+
+    Walks the entire cequal-w2 directory tree under the study
+    directory (derived from `run_dir`) and sets each file's
+    modification time to 7 days before the current time, while
+    keeping its original creation time. This is typically used
+    during testing to avoid triggering a full W2 simulation
+    recompute.
+
+    Parameters
+    ----------
+    run_dir : str
+        Path to the W2 run directory for the current alternative.
+
+    Returns
+    -------
+    None
+        Modifies file modification timestamps in place under the
+        study's `cequal-w2` directory tree.
+    """
     study_dir = study_dir_from_run_dir(run_dir)
     
     current_time = time.time()
@@ -49,12 +91,53 @@ def backdate_W2_files_to_skip_compute(run_dir):
                 os.utime(file_path,(creation_time,modification_time))
 
 def study_dir_from_run_dir(run_dir):
+    """
+    Derive the top-level study directory from a W2 run directory.
+
+    Walks up three directory levels from the given run directory
+    (run directory -> W2 simulation folder -> runs folder -> study
+    folder) to find the root study directory.
+
+    Parameters
+    ----------
+    run_dir : str
+        Path to the W2 run directory for the current alternative.
+
+    Returns
+    -------
+    str
+        The path to the top-level study directory.
+    """
     w2sim,_ = os.path.split(run_dir)
     runs_dir,_ = os.path.split(w2sim)
     study_dir,_ = os.path.split(runs_dir)
     return study_dir
 
 def annual_config_dirs_from_run_dir(run_dir,model_name,startyear_str):
+    """
+    Build the model, annual config, and base directory paths for a
+    given W2 model and start year.
+
+    Uses the study directory (derived from `run_dir`) along with the
+    model name and start year to construct the paths to: the W2
+    model's working directory, the annual configuration directory
+    for the given start year, and the base directory used to store
+    the original, unmodified model input files.
+
+    Parameters
+    ----------
+    run_dir : str
+        Path to the W2 run directory for the current alternative.
+    model_name : str
+        Name of the W2 model, e.g. `'W2 Trinity Prescribed'`.
+    startyear_str : str
+        The forecast start year as a string, e.g. `'2016'`.
+
+    Returns
+    -------
+    tuple of (str, str, str)
+        `(model_dir, annual_config_dir, base_dir)` paths.
+    """
     study_dir = study_dir_from_run_dir(run_dir)
     model_dir = os.path.join(study_dir,'cequal-w2',model_name,model_name)  # don't know why this is two model_names deep!!
     annual_config_dir = os.path.join(study_dir,'shared','W2_annual_configs',model_name,startyear_str)
@@ -62,6 +145,40 @@ def annual_config_dirs_from_run_dir(run_dir,model_name,startyear_str):
     return model_dir,annual_config_dir,base_dir
 
 def computeAlternative(currentAlternative, computeOptions):
+    """
+    Compute the W2 5-Reservoir Prescribed Sacramento Trinity
+    pre-processing alternative.
+
+    Parameters
+    ----------
+    currentAlternative : object
+        The `ScriptingAlternative` being computed. Type:
+        `hec2.wat.plugin.java.impl.scripting.model.ScriptPluginAlt`.
+    computeOptions : object
+        The compute options for this run. Type:
+        `hec.wat.model.ComputeOptions`.
+
+    Returns
+    -------
+    bool
+        True once the pre-processing steps have completed.
+
+    Notes
+    -----
+    For each prescribed W2 model in `W2_models_for_input_copy`, this
+    function locates the model's annual configuration directory for
+    the run's start year, clears out the model's existing input
+    files (keeping only the `.w2Alt`/`.w2Alt.bak` files), and copies
+    in the correct annual configuration input files. It then runs
+    the DMS pre-processing step
+    (`DMS_preprocess.preprocess_W2_5Res`) to finish preparing the
+    5-reservoir W2 simulation inputs.
+
+    A default-year fallback block and an accumulated deposition
+    compute step are present in the code but currently commented
+    out, along with an optional file-backdating step used for
+    skipping recompute during testing.
+    """
     currentAlternative.addComputeMessage("Computing ScriptingAlternative:" + currentAlternative.getName() )
 
     rtw = computeOptions.getRunTimeWindow()
@@ -132,4 +249,3 @@ def computeAlternative(currentAlternative, computeOptions):
     #backdate_W2_files_to_skip_compute(run_dir)
     
     return True
-

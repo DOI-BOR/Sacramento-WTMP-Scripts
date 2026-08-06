@@ -1,48 +1,78 @@
-from hec.heclib.dss import HecDss
-from hec.heclib.util.Heclib import UNDEFINED_DOUBLE
-from hec.io import TimeSeriesContainer
-from rma.util.RMAConst import MISSING_DOUBLE
+"""
+BoundaryFixes
+=============
+
+Utility functions for patching boundary-condition time series in DSS records
+used within HEC-WAT / WTMP Sacramento-Trinity workflows: replacing values
+above a threshold with values from an alternate source record, and filling
+undefined/missing values from a fallback record.
+
+Notes
+-----
+- **Environment:** Jython (Python 2.7 semantics) within HEC-WAT.
+- **Dependencies:** `hec.heclib.dss`, `hec.io`, `rma.util.RMAConst`.
+"""
+
+from hec.heclib.dss import HecDss                     # HEC-DSS: open/read/write DSS files
+from hec.heclib.util.Heclib import UNDEFINED_DOUBLE   # HEC sentinel value representing undefined/missing doubles
+from hec.io import TimeSeriesContainer                # Container class for writing time series back to DSS
+from rma.util.RMAConst import MISSING_DOUBLE          # RMA sentinel for missing values (imported for completeness; not directly used)
 
 def replaceValuesOverThresh(currentAlt, dssFile, timewindow, primary_data_dsspath, secondary_data_dsspath, tertiary_data_dsspath, threshold):
     """
-    When Primary file under threshold, use established data values from tertiary_data_dsspath record
-    when over threshold, use values from secondary data dsspath
+    Replace values in an existing record with values from a
+    secondary record wherever a primary record exceeds a threshold.
+
+    When the primary record is under the threshold, the established
+    data values from `tertiary_data_dsspath` are kept; when the
+    primary record is over the threshold, values from
+    `secondary_data_dsspath` are used instead.
 
     For each timestep where the primary record's value exceeds the
     given threshold, the value in the tertiary ("existing") record
     at that same timestamp is overwritten with the corresponding
     value from the secondary record. Timesteps where the primary
     value stays at or below the threshold are left untouched in the
-    tertiary record. The (possibly modified) tertiary record is
-    then written back to the same DSS path.
-    Args:
-        currentAlt: The alternative object being computed. Must
-            support addComputeMessage() for logging.
-        dssFile (str): Path to the DSS file to read all three
-            records from and write the result to.
-        timewindow: The run time window object, used to get the
-            start and end time strings for reading input data.
-        primary_data_dsspath (str): DSS path of the record whose
-            values are compared against threshold. Converted from
-            cms to cfs if necessary.
-        secondary_data_dsspath (str): DSS path of the record to
-            pull replacement values from, at timesteps where the
-            primary value exceeds threshold.
-        tertiary_data_dsspath (str): DSS path of the "existing"
-            record that gets selectively overwritten and then
-            rewritten back to this same path.
-        threshold (float): The threshold value (in the primary
-            record's units, after cfs conversion if applicable)
-            above which replacement occurs.
+    tertiary record. The (possibly modified) tertiary record is then
+    written back to the same DSS path.
 
-    Returns:
-        int: Always returns 0 on completion. Writes the modified
-            tertiary record back to tertiary_data_dsspath in
-            dssFile. If a matching timestamp cannot be found in
-            either the tertiary or secondary record for a given
-            primary timestep over threshold, a message is printed
-            (but no error is raised) and that timestep is left
-            unmodified.
+    Parameters
+    ----------
+    currentAlt : object
+        The alternative object being computed. Must support
+        `addComputeMessage()` for logging.
+    dssFile : str
+        Path to the DSS file to read all three records from and
+        write the result to.
+    timewindow : object
+        The run time window object, used to get the start and end
+        time strings for reading input data.
+    primary_data_dsspath : str
+        DSS path of the record whose values are compared against
+        `threshold`. Converted from cms to cfs if necessary.
+    secondary_data_dsspath : str
+        DSS path of the record to pull replacement values from, at
+        timesteps where the primary value exceeds `threshold`.
+    tertiary_data_dsspath : str
+        DSS path of the "existing" record that gets selectively
+        overwritten and then rewritten back to this same path.
+    threshold : float
+        The threshold value (in the primary record's units, after
+        cfs conversion if applicable) above which replacement
+        occurs.
+
+    Returns
+    -------
+    int
+        Always returns 0 on completion. Writes the modified tertiary
+        record back to `tertiary_data_dsspath` in `dssFile`.
+
+    Notes
+    -----
+    If a matching timestamp cannot be found in either the tertiary
+    or secondary record for a given primary timestep over threshold,
+    a message is printed (but no error is raised) and that timestep
+    is left unmodified.
     """
     starttime_str = timewindow.getStartTimeString()
     endtime_str = timewindow.getEndTimeString()
@@ -129,39 +159,53 @@ def replaceValuesOverThresh(currentAlt, dssFile, timewindow, primary_data_dsspat
 
 def replaceNaNValues(currentAlt, dssFile, timewindow, existing_dsspath, fill_dsspath):
     """
-    Fill in undefined (missing) values in an existing time series
-    record using matching timestamps from a separate fill record,
-    and write the result back to the same DSS path.
+    Fill undefined (missing) values in an existing time series
+    record using matching timestamps from a fallback record.
 
-    NOTE: The error-message branch below references the variables
-    `primarytime` and `tertiary_data_dsspath`, neither of which
-    exist in this function (they belong to the similarly-structured
-    replaceValuesOverThresh function above). As written, this branch
-    will raise a NameError if it is ever reached (i.e. if a missing
-    value's timestamp cannot be found in the fill record). This
-    appears to be leftover from copying that function's logic and
-    has been left unchanged here for visibility.
+    Writes the filled result back to the same DSS path.
 
-    Args:
-        currentAlt: The alternative object being computed. Must
-            support addComputeMessage() for logging.
-        dssFile (str): Path to the DSS file to read both records
-            from and write the result to.
-        timewindow: The run time window object, used to get the
-            start and end time strings for reading input data.
-        existing_dsspath (str): DSS path of the record to fill
-            missing values in, and to write the result back to.
-        fill_dsspath (str): DSS path of the record to pull
-            replacement values from, at timestamps where the
-            existing record has an undefined value.
+    Parameters
+    ----------
+    currentAlt : object
+        The alternative object being computed. Must support
+        `addComputeMessage()` for logging.
+    dssFile : str
+        Path to the DSS file to read both records from and write
+        the result to.
+    timewindow : object
+        The run time window object, used to get the start and end
+        time strings for reading input data.
+    existing_dsspath : str
+        DSS path of the record to fill missing values in, and to
+        write the result back to.
+    fill_dsspath : str
+        DSS path of the record to pull replacement values from, at
+        timestamps where the existing record has an undefined
+        value.
 
-    Returns:
-        int: Always returns 0 on completion. Writes the filled
-            record back to existing_dsspath in dssFile.
+    Returns
+    -------
+    int
+        Always returns 0 on completion. Writes the filled record
+        back to `existing_dsspath` in `dssFile`.
 
-    Raises:
-        NameError: If a missing value's timestamp cannot be found
-            in the fill record (see NOTE above).
+    Raises
+    ------
+    NameError
+        If a missing value's timestamp cannot be found in the fill
+        record (see Notes below).
+
+    Notes
+    -----
+    **Known issue (left unchanged per instructions):** The
+    error-message branch inside the fill loop references the
+    variables `primarytime` and `tertiary_data_dsspath`, neither of
+    which exist in this function (they belong to the
+    similarly-structured `replaceValuesOverThresh` function above).
+    As written, this branch will raise a `NameError` if it is ever
+    reached (i.e. if a missing value's timestamp cannot be found in
+    the fill record). This appears to be leftover from copying that
+    function's logic.
     """
     starttime_str = timewindow.getStartTimeString()
     endtime_str = timewindow.getEndTimeString()
@@ -224,4 +268,4 @@ def replaceNaNValues(currentAlt, dssFile, timewindow, existing_dsspath, fill_dss
     currentAlt.addComputeMessage("Number of Written values: {0}".format(len(ExistingTS_values)))
     
     # Return successful
-    return 0 
+    return 0

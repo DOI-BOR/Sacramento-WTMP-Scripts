@@ -56,24 +56,36 @@ from java.util import TimeZone                # Java TimeZone (not used directly
 
 def linear_interpolation(x_values, y_values, x):
     """
-    Perform simple linear interpolation to estimate a y-value at a
-    given x, based on a sorted list of known (x, y) points.
+    Estimate a y-value at a given x by linear interpolation between
+    known (x, y) points.
 
-    Args:
-        x_values (list of float): Known x-coordinates, assumed to
-            be sorted in ascending order.
-        y_values (list of float): Known y-coordinates, parallel to
-            x_values.
-        x (float): The x-value to interpolate a y-value for. Must
-            fall within the range of x_values.
+    Parameters
+    ----------
+    x_values : list of float
+        Known x-coordinates, assumed to be sorted in ascending order.
+    y_values : list of float
+        Known y-coordinates, parallel to `x_values`.
+    x : float
+        The x-value to interpolate a y-value for. Must fall within the
+        range of `x_values`.
 
-    Returns:
-        float: The linearly interpolated y-value at x.
+    Returns
+    -------
+    float
+        The linearly interpolated y-value at `x`.
 
-    Raises:
-        ValueError: If x_values and y_values differ in length or
-            contain fewer than 2 points, or if x falls outside the
-            range covered by x_values.
+    Raises
+    ------
+    ValueError
+        If `x_values` and `y_values` differ in length or contain fewer
+        than 2 points, or if `x` falls outside the range covered by
+        `x_values`.
+
+    Notes
+    -----
+    Performs a linear forward scan (not a binary search) to find the
+    bracketing segment, which is fine for the small lookup tables used
+    in this module but would be inefficient for very large tables.
     """
     if len(x_values) != len(y_values) or len(x_values) < 2:
         raise ValueError("Input lists must have the same length and contain at least 2 data points.")
@@ -96,30 +108,35 @@ def linear_interpolation(x_values, y_values, x):
 
 def read_elev_storage_area_file(file_name, res_name):
     """
-    Read a CSV file containing an elevation-storage-area curve for
-    a reservoir, and return it as a dictionary of parallel lists.
+    Read a CSV elevation-storage-area curve for a reservoir into
+    parallel lists.
 
-    NOTE: The 'natoma' reservoir uses a special-cased two-column
-    file format (elevation, area only - no storage column), while
-    all other reservoirs are expected to have a three-column format
-    (elevation, storage, area). Calling this with res_name='natoma'
-    against a three-column file (or vice versa) will misread the
-    data.
+    Parameters
+    ----------
+    file_name : str
+        Path to the CSV file to read. Expected to contain one row per
+        elevation point, comma-separated.
+    res_name : str
+        Reservoir name. If (case-insensitive) equal to ``'natoma'``,
+        the file is parsed as two columns (elev, area). Otherwise, it
+        is parsed as three columns (elev, stor, area).
 
-    Args:
-        file_name (str): Path to the CSV file to read. Expected to
-            contain one row per elevation point, comma-separated.
-        res_name (str): Reservoir name. If (case-insensitive) equal
-            to 'natoma', the file is parsed as two columns
-            (elev, area). Otherwise, it is parsed as three columns
-            (elev, stor, area).
+    Returns
+    -------
+    dict
+        Dictionary with keys ``'elev'``, ``'stor'``, and ``'area'``,
+        each mapping to a list of floats parsed from the file, in
+        units of feet, acre-feet, and acres respectively. For
+        ``'natoma'``, the ``'stor'`` list will be empty, since that
+        file format does not include a storage column.
 
-    Returns:
-        dict: A dictionary with keys 'elev', 'stor', and 'area',
-            each mapping to a list of floats parsed from the file,
-            in units of feet, acre-feet, and acres respectively.
-            For 'natoma', the 'stor' list will be empty, since that
-            file format does not include a storage column.
+    Notes
+    -----
+    The ``'natoma'`` reservoir uses a special-cased two-column file
+    format (elevation, area only - no storage column), while all
+    other reservoirs are expected to have a three-column format
+    (elevation, storage, area). Calling this with ``res_name='natoma'``
+    against a three-column file (or vice versa) will misread the data.
     """
     # These are in [elev, stor, area] with units [ft, acre-ft, acre]
     elevstorarea = {} #avoid lists doing weird things like mixing up order..
@@ -155,10 +172,12 @@ def read_elev_storage_area_file(file_name, res_name):
 
 def build_conic_storage_array(elev, area, firstStorageValue=0.0):
     """
-    Compute cumulative storage array using conic estimation between elevation-area points.
+    Compute cumulative storage array using conic estimation between
+    elevation-area points.
 
-    Adapted from HEC ResSim (storage.java, 2022-06-17). Each step integrates a
-    conic segment between successive elevation-area points and accumulates.
+    Adapted from HEC ResSim (storage.java, 2022-06-17). Each step
+    integrates a conic segment between successive elevation-area
+    points and accumulates.
 
     Parameters
     ----------
@@ -173,6 +192,14 @@ def build_conic_storage_array(elev, area, firstStorageValue=0.0):
     -------
     list of float
         Cumulative storage at each elevation point (acre-ft).
+
+    Notes
+    -----
+    The conic (frustum) formula estimates the volume of the slab
+    between two elevation-area points as
+    ``h/3 * (A0 + A1 + sqrt(A0*A1))``, which is exact for a linearly
+    tapering (conic) shape and is the same approach used internally
+    by HEC-ResSim.
     """
 
     # Calculate storage at each elevation using conic formula
@@ -191,7 +218,8 @@ def build_conic_storage_array(elev, area, firstStorageValue=0.0):
 
 def conic_storage_interp(interpElev, elev, area, conicStorage, idx):
     """
-    Interpolate storage between measurement points using conic layer approach.
+    Interpolate storage between measurement points using conic layer
+    approach.
 
     Parameters
     ----------
@@ -236,21 +264,30 @@ def get_elev_layer_idx(elev, obs_elev, elev_stor_area):
     Find the index of the elevation layer that lower-bounds a given
     observed elevation, within an elevation-storage-area table.
 
-    Args:
-        elev (list of float): Known elevation values to search
-            within.
-        obs_elev (float): The observed elevation to locate within
-            elev.
-        elev_stor_area (dict): The elevation-storage-area table
-            (as produced by read_elev_storage_area_file), used to
-            re-check whether the closest elevation is above or
-            below obs_elev.
+    Parameters
+    ----------
+    elev : list of float
+        Known elevation values to search within.
+    obs_elev : float
+        The observed elevation to locate within `elev`.
+    elev_stor_area : dict
+        The elevation-storage-area table (as produced by
+        `read_elev_storage_area_file`), used to re-check whether the
+        closest elevation is above or below `obs_elev`.
 
-    Returns:
-        int: The index of the elevation value that lower-bounds
-            obs_elev (i.e. elev[idx] <= obs_elev). Returns -1 if no
-            valid index could be determined (e.g. an empty elev
-            list).
+    Returns
+    -------
+    int
+        The index of the elevation value that lower-bounds `obs_elev`
+        (i.e. ``elev[idx] <= obs_elev``). Returns -1 if no valid index
+        could be determined (e.g. an empty `elev` list).
+
+    Notes
+    -----
+    Equivalent (commented out above) to a vectorized numpy
+    ``argmin(abs(elev - obs_elev))`` with a step-back correction, but
+    implemented as an explicit scan since numpy is not available in
+    this Jython environment.
     """
     # find lower bounding index of where elevation lands in elev-stor-area table
     # idx = np.argmin(np.abs(elev-obs_elev))
@@ -292,8 +329,26 @@ def get_elev_layer_idx(elev, obs_elev, elev_stor_area):
 
 def get_balance_period(balance_period):
     """
-    Convert a HEC-style balance period string into a number of
-    hours.
+    Convert a HEC-style balance period string into a number of hours.
+
+    Parameters
+    ----------
+    balance_period : str
+        HEC-style interval string containing one of the substrings
+        ``'hour'``, ``'day'``, or ``'min'`` (case-insensitive), e.g.
+        ``'1Hour'``, ``'1Day'``, ``'15Min'``.
+
+    Returns
+    -------
+    float
+        The equivalent period length in hours. Returns ``None``
+        implicitly if none of the recognized substrings are present.
+
+    Notes
+    -----
+    The numeric portion is extracted by stripping the recognized unit
+    substring and converting the remainder to a float, so the input
+    must be of the form ``'<number><unit>'``.
     """
     # convert the period string to hours based on which unit substring it contains
     if 'hour' in balance_period.lower():
@@ -308,21 +363,25 @@ def get_balance_period(balance_period):
 
 def check_dss_intervals(records, balance_period, currentAlt):
     """
-    Validate that every DSS record path in a list mentions the
-    expected balance period, logging an error and exiting if any do
-    not.
+    Validate that every DSS record path mentions the expected balance
+    period, aborting the compute if any do not.
 
-    Args:
-        records (list of str): DSS record paths to check.
-        balance_period (str): The expected period string (e.g.
-            '1Day') that should appear somewhere in each record
-            path (typically the E-part).
-        currentAlt: The alternative object being computed. Used to
-            log an error message if a mismatch is found.
+    Parameters
+    ----------
+    records : list of str
+        DSS record paths to check.
+    balance_period : str
+        The expected period string (e.g. ``'1Day'``) that should
+        appear somewhere in each record path (typically the E-part).
+    currentAlt : object
+        The alternative object being computed. Used to log an error
+        message if a mismatch is found.
 
-    Returns:
-        None. Exits the process (sys.exit(-1)) if any record does
-        not contain balance_period.
+    Returns
+    -------
+    None
+        Exits the process (``sys.exit(-1)``) if any record does not
+        contain `balance_period`.
     """
     # check every record for the expected time interval substring
     for r in records:
@@ -332,8 +391,31 @@ def check_dss_intervals(records, balance_period, currentAlt):
 
 
 def read_ts_rec_w_optional_fname(dssFm, pathname, starttime_str, endtime_str):
-    '''pathname may contain the dss filepath additionally before the dss ts path, separated by '::'
-       If so, use that dss file.'''
+    """
+    Read a DSS time series record, optionally from an alternate DSS
+    file specified inline in the pathname string.
+
+    Parameters
+    ----------
+    dssFm : object
+        An already-open HEC-DSS file handle to use if `pathname` does
+        not specify an alternate file.
+    pathname : str
+        DSS record path. May optionally contain the DSS filepath
+        before the DSS ts path, separated by ``'::'`` (e.g.
+        ``'C:/data/alt.dss::/A/B/C/D/E/F/'``). If present, that file
+        is opened, read, and closed instead of using `dssFm`.
+    starttime_str : str
+        Start time string for the windowed read.
+    endtime_str : str
+        End time string for the windowed read.
+
+    Returns
+    -------
+    object
+        The `TimeSeriesContainer` data for the requested record and
+        time window.
+    """
     # if an alternate DSS file is embedded in the path string, open and read from that file instead
     if '::' in pathname:
         print('Splitting and reading:',pathname)        # Diagnostic for alternate-file reads
@@ -352,9 +434,54 @@ def read_inflows_outflows(currentAlt, dss_file, inflow_records, outflow_records,
                           starttime_hectime, endtime_hectime):
 
      """
-    Read and sum multiple inflow and outflow DSS records over a
-    given time window, converting units to cfs as needed, and
-    return the net inflow-minus-outflow time series.
+    Read and sum multiple inflow and outflow DSS records over a given
+    time window, converting units to cfs as needed, and return the
+    net inflow-minus-outflow time series.
+
+    Parameters
+    ----------
+    currentAlt : object
+        The alternative object being computed. Must support
+        `addComputeMessage()` for logging.
+    dss_file : str
+        Path to the primary DSS file to read records from (unless a
+        record path specifies an alternate file via ``'::'``).
+    inflow_records : list of str
+        DSS pathnames of records to sum together as total inflow.
+    outflow_records : list of str
+        DSS pathnames of records to sum together as total outflow.
+    starttime_str : str
+        Start time string for the windowed reads.
+    endtime_str : str
+        End time string for the windowed reads.
+    starttime_hectime : int
+        HEC integer time corresponding to `starttime_str`, used for
+        trimming records that start earlier than the window.
+    endtime_hectime : int
+        HEC integer time corresponding to `endtime_str`, used for
+        trimming records that extend later than the window.
+
+    Returns
+    -------
+    tuple of (list, list)
+        ``(times, inflow_outflow)`` where `times` are the HEC times
+        of the first inflow record read, and `inflow_outflow` is the
+        elementwise net flow (inflow minus outflow) in cfs, aligned
+        to those times (offset by one, see Notes).
+
+    Raises
+    ------
+    SystemExit
+        Calls ``sys.exit(-1)`` if a `HecMathException` occurs while
+        reading any of the input records.
+
+    Notes
+    -----
+    - The returned `inflow_outflow` list is built from
+      ``inflows[1:]`` and ``outflows[1:]``, i.e. it skips the first
+      timestep of each accumulated series.
+    - If a record's units are ``'cms'``, values are converted to cfs
+      using the factor ``35.314666213``.
     """
      dssFm = HecDss.open(dss_file)
 
@@ -479,11 +606,12 @@ def predict_elevation(currentAlt, starttime_str, endtime_str, res_name, inflow_r
                          elev_stor_area, dss_file, output_dss_record_name, output_dss_file, shared_dir,
                          use_conic=False, alt_period=None, alt_period_string=None, balance_period_str='1Hour'):
     """
-    Predict elevation and storage over a period from inflow/outflow balance.
+    Predict elevation and storage over a period from inflow/outflow
+    balance.
 
-    Useful for generating lookback/starting elevations for forecast runs that
-    begin mid-period; integrates inflow-outflow into storage and maps storage
-    back to elevation via interpolation.
+    Useful for generating lookback/starting elevations for forecast
+    runs that begin mid-period; integrates inflow-outflow into
+    storage and maps storage back to elevation via interpolation.
 
     Parameters
     ----------
@@ -529,10 +657,9 @@ def predict_elevation(currentAlt, starttime_str, endtime_str, res_name, inflow_r
     -----
     - Storage integration uses `cfs_2_acreft` derived from balance period.
     - Elevation mapping uses linear interpolation on storage→elevation curve.
+    - Conic interpolation and evaporation are not yet supported here
+      (see TODO comments in the function body).
     """
-    '''From inflows/outflows, predict hourly elevation, useful for lookback/starting elevation for forecasts starting
-    on arbitrary dates during forecast period
-    '''
 
     # Get the balance period of the calculation
     balance_period = get_balance_period(balance_period_str) # convert to (float) hours
@@ -612,68 +739,93 @@ def create_balance_flows(currentAlt, timewindow, res_name, inflow_records, outfl
 
 
     """
-    Compute a reservoir mass-balance ("balance flow") time series -
-    the residual flow needed to reconcile observed storage change
-    with recorded inflows, outflows, and evaporation - and write it
-    to DSS, with optional companion evaporation and storage records
-    and an optional resampled copy at an alternate time interval.
+    Compute a reservoir mass-balance ("balance flow") time series and
+    write it to DSS.
 
-    Args:
-        currentAlt: The alternative object being computed. Must
-            support addComputeMessage() for logging.
-        timewindow: The run time window object, used to get the
-            start and end time strings for reading input data.
-        res_name (str): Reservoir name, used to label the debug CSV
-            output file.
-        inflow_records (list of str): DSS paths of records to sum
-            as total inflow.
-        outflow_records (list of str): DSS paths of records to sum
-            as total outflow.
-        stage_record (str): DSS path of the reservoir stage
-            (elevation) record.
-        evap_record (str): DSS path of the evaporation record.
-        elev_stor_area (dict): Elevation-storage-area lookup table
-            (as produced by read_elev_storage_area_file), with keys
-            'elev', 'stor', and 'area'.
-        dss_file (str): Path to the DSS file containing the input
-            records.
-        output_dss_record_name (str): DSS path to write the
-            computed balance flow record to.
-        output_dss_file (str): Path to the DSS file to write output
-            records to.
-        shared_dir (str): Directory to write the debug CSV file to.
-        storage_dss_record_name (str, optional): DSS path to write
-            the computed storage record to, if write_storage is
-            True. Defaults to ''.
-        evap_dss_record_name (str, optional): DSS path to write the
-            computed evaporation-flow-loss record to, if write_evap
-            is True. Defaults to ''.
-        balance_period_str (str, optional): The expected time
-            interval of all input records (e.g. '1HOUR'). Defaults
-            to "1HOUR".
-        use_conic (bool, optional): If True, use conic frustum
-            interpolation (via get_elev_layer_idx and
-            conic_storage_interp) to estimate storage from stage.
-            If False, use simple linear interpolation. Defaults to
-            False.
-        write_evap (bool, optional): If True, also write the
-            computed evaporation-flow-loss series to DSS. Defaults
-            to False.
-        write_storage (bool, optional): If True, also write the
-            computed storage series to DSS. Defaults to False.
-        alt_period (optional): If not None, triggers writing an
-            additional resampled copy of the balance flow at
-            alt_period_string's interval.
-        alt_period_string (str, optional): The alternate time
-            interval string to resample to, used only if alt_period
-            is not None.
-        lookback_padding (int, optional): Currently unused within
-            the function body (referenced only in a commented-out
-            block). Defaults to 1440.
+    The balance flow is the residual flow needed to reconcile
+    observed storage change with recorded inflows, outflows, and
+    evaporation, with optional companion evaporation and storage
+    records and an optional resampled copy at an alternate time
+    interval.
 
-    Returns:
-        bool: True once the balance flow (and any requested
-            companion records) have been written to DSS.
+    Parameters
+    ----------
+    currentAlt : object
+        The alternative object being computed. Must support
+        `addComputeMessage()` for logging.
+    timewindow : object
+        The run time window object, used to get the start and end
+        time strings for reading input data.
+    res_name : str
+        Reservoir name, used to label the debug CSV output file.
+    inflow_records : list of str
+        DSS paths of records to sum as total inflow.
+    outflow_records : list of str
+        DSS paths of records to sum as total outflow.
+    stage_record : str
+        DSS path of the reservoir stage (elevation) record.
+    evap_record : str
+        DSS path of the evaporation record.
+    elev_stor_area : dict
+        Elevation-storage-area lookup table (as produced by
+        `read_elev_storage_area_file`), with keys `'elev'`, `'stor'`,
+        and `'area'`.
+    dss_file : str
+        Path to the DSS file containing the input records.
+    output_dss_record_name : str
+        DSS path to write the computed balance flow record to.
+    output_dss_file : str
+        Path to the DSS file to write output records to.
+    shared_dir : str
+        Directory to write the debug CSV file to.
+    storage_dss_record_name : str, optional
+        DSS path to write the computed storage record to, if
+        `write_storage` is True. Defaults to ``''``.
+    evap_dss_record_name : str, optional
+        DSS path to write the computed evaporation-flow-loss record
+        to, if `write_evap` is True. Defaults to ``''``.
+    balance_period_str : str, optional
+        The expected time interval of all input records (e.g.
+        ``'1HOUR'``). Defaults to ``"1HOUR"``.
+    use_conic : bool, optional
+        If True, use conic frustum interpolation (via
+        `get_elev_layer_idx` and `conic_storage_interp`) to estimate
+        storage from stage. If False, use simple linear
+        interpolation. Defaults to False.
+    write_evap : bool, optional
+        If True, also write the computed evaporation-flow-loss series
+        to DSS. Defaults to False.
+    write_storage : bool, optional
+        If True, also write the computed storage series to DSS.
+        Defaults to False.
+    alt_period : optional
+        If not None, triggers writing an additional resampled copy of
+        the balance flow at `alt_period_string`'s interval.
+    alt_period_string : str, optional
+        The alternate time interval string to resample to, used only
+        if `alt_period` is not None.
+    lookback_padding : int, optional
+        Currently unused within the function body (referenced only in
+        a commented-out block). Defaults to 1440.
+
+    Returns
+    -------
+    bool
+        True once the balance flow (and any requested companion
+        records) have been written to DSS.
+
+    Notes
+    -----
+    - Edge-value safeguard: the first ``check_steps`` and last
+      ``check_steps`` computed residual-flow values are zeroed out if
+      NaN or unrealistically large in magnitude (beyond
+      ``bad_flow_bound``), since timezone/period-boundary effects on
+      the first/last days can otherwise produce large spurious
+      values. `check_steps` is 24 for an hourly balance period, else 1.
+    - The written balance-flow series duplicates its first computed
+      value twice at the front (``[flow_resid[0], flow_resid[0]] +
+      flow_resid``) as a workaround so that later time-averaging
+      doesn't drop the first needed timestep for a ResSim run.
     """
     # --- Validate that all input records share the expected time interval ---
     check_dss_intervals(inflow_records, balance_period_str, currentAlt)

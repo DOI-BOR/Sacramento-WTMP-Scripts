@@ -1,10 +1,27 @@
-import sys
-import flowweightaverage
-reload(flowweightaverage)
-import BoundaryFixes
-reload(BoundaryFixes)
-import DSS_Tools
-reload(DSS_Tools)
+"""
+Trinity2Lewiston
+=================
+
+Compute a WAT Scripting Alternative that performs a three-stage
+post-processing workflow on boundary condition time series for the
+Trinity-to-Lewiston link: flow-weighted averaging under a low-flow
+threshold, replacement of values over that threshold with a dedicated
+source record, and replacement of any remaining NaN values with a
+fallback record.
+
+Notes
+-----
+- **Environment:** Jython (Python 2.7 semantics) within HEC-WAT.
+- **Dependencies:** `flowweightaverage`, `BoundaryFixes`, `DSS_Tools`.
+"""
+
+import sys                       # Standard library: retained (not directly used beyond potential diagnostics)
+import flowweightaverage         # Local module: flow-weighted average temperature computation (FWA)
+reload(flowweightaverage)        # Jython: ensure latest version is loaded
+import BoundaryFixes             # Local module: threshold/NaN replacement helpers
+reload(BoundaryFixes)            # Reload to ensure latest version
+import DSS_Tools                 # Local module: DSS path resolution / F-part fixing helpers
+reload(DSS_Tools)                # Reload to ensure latest version
 
 ##
 #
@@ -28,24 +45,37 @@ def computeAlternative(currentAlternative, computeOptions):
     1. Filters out the structure 1 flow and total temperature input
        locations, then organizes the remaining input locations and
        computes a flow weighted average for values under 1 CFS using
-       flowweightaverage.FWA.
+       `flowweightaverage.FWA`.
     2. Replaces output values over the 1 CFS threshold using
-       BoundaryFixes.replaceValuesOverThresh, based on the structure 1
-       flow and total temperature input data.
+       `BoundaryFixes.replaceValuesOverThresh`, based on the
+       structure 1 flow and total temperature input data.
     3. Replaces any remaining NaN values in the output time series
-       using BoundaryFixes.replaceNaNValues, based on the WD2
+       using `BoundaryFixes.replaceNaNValues`, based on the WD2
        temperature input data.
 
-    Args:
-        currentAlternative: The ScriptingAlternative being computed.
-            Type: hec2.wat.plugin.java.impl.scripting.model.ScriptPluginAlt
-        computeOptions: The compute options for this run.
-            Type: hec.wat.model.ComputeOptions
+    Parameters
+    ----------
+    currentAlternative : object
+        The `ScriptingAlternative` being computed. Type:
+        `hec2.wat.plugin.java.impl.scripting.model.ScriptPluginAlt`.
+    computeOptions : object
+        The compute options for this run. Type:
+        `hec.wat.model.ComputeOptions`.
 
-    Returns:
-        bool: True if the script completed successfully, False otherwise.
-            An implicit return (no explicit return statement) is treated
-            as a successful return.
+    Returns
+    -------
+    bool
+        True if the script completed successfully. An implicit
+        return (no explicit return statement) is treated as a
+        successful return.
+
+    Notes
+    -----
+    This function is structurally very similar to
+    `OutputLink_W2-Trinity-W2-Lewiston_SacTrn.py`'s
+    `computeAlternative`, but here the full three-stage workflow
+    (FWA, threshold replacement, and NaN filling) actually executes,
+    since there is no early `return` statement preceding it.
     """
     currentAlternative.addComputeMessage("Computing ScriptingAlternative:" + currentAlternative.getName() )
     
@@ -124,7 +154,3 @@ def computeAlternative(currentAlternative, computeOptions):
             Wd2_temps_dsspath = DSS_Tools.fixInputLocationFpart(currentAlternative, Wd2_temps_dsspath)
     BoundaryFixes.replaceNaNValues(currentAlternative, dss_file, rtw, outputpath, Wd2_temps_dsspath)
     return True
-
-
-            
-
