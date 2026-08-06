@@ -22,7 +22,7 @@ Notes
 
 from hec.heclib.dss import HecDss  # HEC-DSS file manager (open/read/write/rename records)
 from hec.heclib.util.Heclib import UNDEFINED_DOUBLE  # Heclib sentinel value representing undefined doubles
-from hec.io import DSSIdentifier  # Optional helper for DSS pathname parsing/building (A–F parts)
+from hec.io import DSSIdentifier  # Optional helper for DSS pathname parsing/building (A-F parts)
 from hec.io import TimeSeriesContainer  # Container class holding times/values/units/type for a time series
 from rma.util.RMAConst import MISSING_DOUBLE  # RMA/HEC sentinel value representing missing doubles
 import math, sys  # Standard Python: math functions and system utilities (e.g., exit)
@@ -115,7 +115,7 @@ def flow_in_cfs(units,flows):
 
         # Loop and convert values 
         for f in flows:
-            values_converted.append(f * 35.314666213)  # conversion: cms → cfs
+            values_converted.append(f * 35.314666213)  # conversion: cms to cfs
     
         # Return the converted values
         return values_converted
@@ -158,7 +158,7 @@ def temperature_in_C(units,temps):
         
         # Loop and convert the values
         for t in temps:
-            values_converted.append((t - 32.0) * 5.0 / 9.0)  # conversion: °F → °C
+            values_converted.append((t - 32.0) * 5.0 / 9.0)  # conversion: F to C
         
         # Return the converted values
         return values_converted
@@ -285,47 +285,47 @@ def FWA2(currentAlt, dssFile, timewindow, DSSPaths_list, outputname, cfs_limit=N
 
         # Attempt to process the temperature information
         try:
-	        tsc_temp = dssFm.read(temp_dss_path, starttime_str, endtime_str, False).getData()
-	        temps = temperature_in_C(tsc_temp.units,tsc_temp.values)
-	        print('tscf',tsc_flow.values[0])
-	        print(flows[0])
-	        print('tsct',tsc_temp.values[0])
-	        print(temps[0])
-	
-	        # use type of 1st temp record
-	        if dspi==0:
-	            nrecs = len(flows)
-	            temp_type = tsc_temp.type
-	
-	        # all pairs must have the same number of records to align by timestep
-	        if len(flows) != nrecs or len(temps) != nrecs:
-	            currentAlt.addComputeMessage("FWA2: record lengths do not match!")
-	            print("FWA2: record lengths do not match!",nrecs,len(flows),len(temps))
-	            sys.exit(-1)
-	
-	        # for each timestep, validate the flow/temp values and accumulate weighted totals
-	        for i in range(nrecs):
-	            if dspi==0:
-	                n_pairs.append(0) # init counter for number of flow/temp pairs in weighted average
-	                flow_total.append(0.0)
-	                flowtemp_total.append(0.0)
-	            # perform a lot of checks on data
-	            #print(i,flows[i],temps[i])
-	            if not math.isnan(flows[i]) and not math.isnan(temps[i]):
-	                if flows[i] > flow_limit and flows[i] < 9.0e6: # could lower upper limit to something relevant to watershed
-	                    if temps[i] >= 0.0 and temps[i] <= 80.0:
-	                        # passed the data checks
-	                        
-	                        n_pairs[i] += 1
-	                        flow_total[i] += flows[i]
-	                        flowtemp_total[i] += flows[i]*temps[i]
-	
-	                        #print(dspi,i,n_pairs[i],flows[i],temps[i],flow_total[i],flowtemp_total[i])
-	        last_rec_valid = True
+            tsc_temp = dssFm.read(temp_dss_path, starttime_str, endtime_str, False).getData()
+            temps = temperature_in_C(tsc_temp.units,tsc_temp.values)
+            print('tscf',tsc_flow.values[0])
+            print(flows[0])
+            print('tsct',tsc_temp.values[0])
+            print(temps[0])
+    
+            # use type of 1st temp record
+            if dspi==0:
+                nrecs = len(flows)
+                temp_type = tsc_temp.type
+    
+            # all pairs must have the same number of records to align by timestep
+            if len(flows) != nrecs or len(temps) != nrecs:
+                currentAlt.addComputeMessage("FWA2: record lengths do not match!")
+                print("FWA2: record lengths do not match!",nrecs,len(flows),len(temps))
+                sys.exit(-1)
+    
+            # for each timestep, validate the flow/temp values and accumulate weighted totals
+            for i in range(nrecs):
+                if dspi==0:
+                    n_pairs.append(0) # init counter for number of flow/temp pairs in weighted average
+                    flow_total.append(0.0)
+                    flowtemp_total.append(0.0)
+                # perform a lot of checks on data
+                #print(i,flows[i],temps[i])
+                if not math.isnan(flows[i]) and not math.isnan(temps[i]):
+                    if flows[i] > flow_limit and flows[i] < 9.0e6: # could lower upper limit to something relevant to watershed
+                        if temps[i] >= 0.0 and temps[i] <= 80.0:
+                            # passed the data checks
+                            
+                            n_pairs[i] += 1
+                            flow_total[i] += flows[i]
+                            flowtemp_total[i] += flows[i]*temps[i]
+    
+                            #print(dspi,i,n_pairs[i],flows[i],temps[i],flow_total[i],flowtemp_total[i])
+            last_rec_valid = True
         except:
-	        currentAlt.addComputeMessage('FWA2: data not addeded for record: '+temp_dss_path)
-	        last_rec_valid = False
-		
+            currentAlt.addComputeMessage('FWA2: data not addeded for record: '+temp_dss_path)
+            last_rec_valid = False
+        
     # Compute the final flow-weighted average at each timestep 
     fwat = []
     print('nrecs:',nrecs)
@@ -413,11 +413,6 @@ def FWA(currentAlt, dssFile, timewindow, DSSPaths_list, outputname, cfs_limit=No
       arbitrary reference pair, which assumes a stable key/insertion
       order for the `dss_data` dictionary. Depending on the
       Python/Jython version in use, this may not be guaranteed.
-    - `hecstarttimes` is referenced when building the output
-      `TimeSeriesContainer` but is never assigned anywhere in this
-      function - this appears to be a leftover reference to a
-      variable defined elsewhere, and will raise a `NameError` when
-      this function is called.
     """
     starttime_str = timewindow.getStartTimeString()
     endtime_str = timewindow.getEndTimeString()
@@ -445,6 +440,7 @@ def FWA(currentAlt, dssFile, timewindow, DSSPaths_list, outputname, cfs_limit=No
 
         # Remove the data from the container
         flowTS = flowTS.getData()
+        hecstarttimes = flowTS.times
         
         flow_units = flowTS.units
         # if the flow series is in cms, convert it to cfs
@@ -453,7 +449,7 @@ def FWA(currentAlt, dssFile, timewindow, DSSPaths_list, outputname, cfs_limit=No
             flowvals = []
             # convert each cms value to cfs
             for flow in flowTS.values:
-                flowvals.append(flow * 35.314666213)  # cms → cfs
+                flowvals.append(flow * 35.314666213)  # cms to cfs
             dss_data[dspi] = {'flow': flowvals}  # start dict with converted flows
         else:
             dss_data[dspi] = {'flow': flowTS.values}  # start dict with raw flows

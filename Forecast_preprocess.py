@@ -8,7 +8,7 @@ WTMP/ResSim/W2 forecast workflows. It includes:
   equilibrium water temperature (`equilibrium_temp`), and writing timeseries at
   multiple intervals.
 - **Reservoir elevation derivations**: Converting storage to elevation using
-  tabulated elevation–storage–area data, inventing elevation records where
+  tabulated elevation-storage-area data, inventing elevation records where
   timing surrogates are needed, and predicting future elevations from inflows/
   outflows.
 - **Target temperature routing**: Building upstream temperature targets from
@@ -25,7 +25,7 @@ from hec.heclib.dss import HecDss  # HEC-DSS file manager: open/read/write time 
 from hec.hecmath import HecMathException  # Exception class for HEC math operations (e.g., transforms)
 from hec.heclib.util.Heclib import UNDEFINED_DOUBLE  # Heclib sentinel for undefined doubles
 from hec.heclib.util import HecTime  # HEC time object representing DSS-friendly dates/times
-from hec.io import DSSIdentifier  # DSS pathname identifier helper (A–F part parsing/building)
+from hec.io import DSSIdentifier  # DSS pathname identifier helper (A-F part parsing/building)
 from hec.io import TimeSeriesContainer  # Container for DSS time series (times/values/units/type)
 from hec.io import DataContainer  # Base container type used across HEC library data structures
 import hec.hecmath.TimeSeriesMath as tsmath  # Time series math wrapper for transforms/regularization
@@ -709,7 +709,7 @@ def forecast_data_preprocess_ResSim_5Res(currentAlternative, computeOptions):
     DSS_Tools.create_constant_dss_rec(currentAlternative, rtw, forecast_dss, constant=0.001, what='flow',
                         dss_type='PER-AVER', period='1HOUR', cpart='TinyFlow', fpart='TinyFlow')  # Tiny hourly flow
     DSS_Tools.create_constant_dss_rec(currentAlternative, rtw, forecast_dss, constant=10.0, what='temp-water',
-                        dss_type='PER-AVER', period='1DAY', cpart='TENS', fpart='TENS')  # Daily temp 10°C
+                        dss_type='PER-AVER', period='1DAY', cpart='TENS', fpart='TENS')  # Daily temp 10C
     DSS_Tools.create_constant_dss_rec(currentAlternative, rtw, forecast_dss, constant=0.0, what='flow',
                         dss_type='PER-AVER', period='1DAY', cpart='ZEROS', fpart='ZEROS')  # Daily zero flow
     DSS_Tools.create_constant_dss_rec(currentAlternative, rtw, forecast_dss, constant=0.0, what='flow',
@@ -730,8 +730,8 @@ def forecast_data_preprocess_ResSim_5Res(currentAlternative, computeOptions):
 
     # compute W2 regression downstream target temps, in case we want to try/use them in ResSim
     # Keswick need daily record.
-    DSS_Tools.resample_dss_ts(forecast_dss, '//SHASTA/FLOW-RELEASE-KESWICK-CFS//1Hour/SACTRN_BC_SCRIPT/', rtw, forecast_dss, '1DAY', pad_start_days=1)  # Hour→Day
-    DSS_Tools.resample_dss_ts(forecast_dss, '/USBR/SHASTA/TEMP-WATER-TARGET//1Hour/SACTRN_BC_SCRIPT/', rtw, forecast_dss, '1DAY')  # Hour→Day targets
+    DSS_Tools.resample_dss_ts(forecast_dss, '//SHASTA/FLOW-RELEASE-KESWICK-CFS//1Hour/SACTRN_BC_SCRIPT/', rtw, forecast_dss, '1DAY', pad_start_days=1)  # Hour to Day
+    DSS_Tools.resample_dss_ts(forecast_dss, '/USBR/SHASTA/TEMP-WATER-TARGET//1Hour/SACTRN_BC_SCRIPT/', rtw, forecast_dss, '1DAY')  # Hour to Day targets
 
     # read location from DSS
     location = get_downstream_loc(forecast_dss)  # 0=Dam, others downstream points
@@ -743,7 +743,7 @@ def forecast_data_preprocess_ResSim_5Res(currentAlternative, computeOptions):
     # Apply the regression to account for warming between the release and the 
     if location == 0:
         # At Shasta Dam, use exact TT without adjustment
-        DSS_Tools.copy_dss_ts(TT_rec, new_dss_rec=TT_W2_rec, dss_file_path=forecast_dss, checkMakeCelsius=True)  # Copy/convert to °C
+        DSS_Tools.copy_dss_ts(TT_rec, new_dss_rec=TT_W2_rec, dss_file_path=forecast_dss, checkMakeCelsius=True)  # Copy/convert to C
     
     else:
         # otherwise, back-calculate the upstream (Shasta) target temperature needed
@@ -956,7 +956,7 @@ def get_step_future_and_RiverHrs(wqTargetDaily,keswickFlowDaily,step,loc):
     hrs = travel_time_hrs(loc, keswickFlowDaily[step])  # Compute travel hours
 
     # Get Keswick pool information - from forecast TCD script
-    flowVol = keswickFlowDaily[step] * 86400.  # Daily volume [ft³]
+    flowVol = keswickFlowDaily[step] * 86400.  # Daily volume [ft3]
     kesConPoolVol = 20100. * 43560.  # cubic feet, assumed this is top of conservation
     kesFraction = flowVol / kesConPoolVol  # Residence proxy
     multiplier = 0.14  # Calibration factor
@@ -1198,10 +1198,10 @@ def upstream_target(forecastDSS,rtw,downstreamTT_rec,eqTemp_rec,kesFlow_rec,sppF
     # select the correct regression coefficient set based on location and river type
     if loc == 2:
         if ResSimRiver:
-            coeffs = kes2sha_coeffs  # Use Keswick→Shasta coefficients when routing via river model
+            coeffs = kes2sha_coeffs  # Use Keswick to Shasta coefficients when routing via river model
         
         else:
-            coeffs = ccr2sha_coeffs  # Use CCR→Shasta coefficients for regression-only path
+            coeffs = ccr2sha_coeffs  # Use CCR to Shasta coefficients for regression-only path
     
     else:
         raise ValueError("upstream_target: loc unknown, currently must be one of  {2,}")
@@ -1220,9 +1220,9 @@ def upstream_target(forecastDSS,rtw,downstreamTT_rec,eqTemp_rec,kesFlow_rec,sppF
     # if the downstream target is in Fahrenheit, convert it to Celsius
     if TT_units.lower() == 'f' or TT_units.lower() == 'degF':
         for i, TT in enumerate(downstreamTT):
-            downstreamTT[i] = (TT - 32.0) * 5.0 / 9.0  # Convert to °C
+            downstreamTT[i] = (TT - 32.0) * 5.0 / 9.0  # Convert to C
 
-        # Mark as °C
+        # Mark as C
         tsc.units = 'C'  
     
     # Close file
@@ -1409,8 +1409,8 @@ def forecast_data_preprocess_W2_5Res(currentAlternative, computeOptions):
                         dss_type='PER-AVER', period='1DAY',cpart='WHI-target-13',fpart='WHI-target-13')
 
     # Keswick need daily record.
-    DSS_Tools.resample_dss_ts(forecast_dss, '//SHASTA/FLOW-RELEASE-KESWICK-CFS//1Hour/SACTRN_BC_SCRIPT/', rtw, forecast_dss, '1DAY', pad_start_days=1)  # Hour→Day
-    DSS_Tools.resample_dss_ts(forecast_dss, '/USBR/SHASTA/TEMP-WATER-TARGET//1Hour/SACTRN_BC_SCRIPT/', rtw, forecast_dss, '1DAY')  # Hour→Day
+    DSS_Tools.resample_dss_ts(forecast_dss, '//SHASTA/FLOW-RELEASE-KESWICK-CFS//1Hour/SACTRN_BC_SCRIPT/', rtw, forecast_dss, '1DAY', pad_start_days=1)  # Hour to Day
+    DSS_Tools.resample_dss_ts(forecast_dss, '/USBR/SHASTA/TEMP-WATER-TARGET//1Hour/SACTRN_BC_SCRIPT/', rtw, forecast_dss, '1DAY')  # Hour to Day
 
     # read location from DSS
     location = get_downstream_loc(forecast_dss)  # Read downstream control location
@@ -1428,7 +1428,7 @@ def forecast_data_preprocess_W2_5Res(currentAlternative, computeOptions):
                         "/USBR/SHASTA/TEMP-WATER-TARGET//1Day/SACTRN_BC_SCRIPT/",
                         "/MR Sac.-Clear Cr. to Sac R./KRDD/Temp-Equil//1Day/sactrn_bc_script/",
                         "//SHASTA/FLOW-RELEASE-KESWICK-CFS//1Day/SACTRN_BC_SCRIPT/",
-                        "/CLEAR CREEK/WHOW-DIVERSION-SPRING-CR//1Day/SACTRN_BC_SCRIPT/",
+                        "/CLEAR CREEK/WHISKEYTOWN LAKE/FLOW-DIVERSION-SPRING-CR//1Day/SACTRN_BC_SCRIPT/",
                         location, TT_W2_rec, ResSimRiver=False)  # Regression/back-routing path
 
     # Return that the setup was successful

@@ -1,5 +1,5 @@
 """
-Pre-Process: ResSim/W2 (Sacramento–Trinity WTMP)
+Pre-Process: ResSim/W2 (Sacramento Trinity WTMP)
 ===============================================
 
 Purpose
@@ -12,10 +12,10 @@ Utilities and workflow steps to:
 
 Notes
 -----
-- **Environment:** Jython in HEC‑WAT (Python 2.7 semantics), using HEC‑DSS APIs.
+- **Environment:** Jython in HEC‑WAT (Python 2.7 semantics), using HEC-DSS APIs.
 - **I/O:** DSS paths may be specified as `file::/A/B/C/D/E/F/` to target
   a specific file; otherwise the primary file handle is used.
-- **Units:** Flow CMS→CFS factor `35.314666213`; wind conversions (kph↔m/s);
+- **Units:** Flow CMS to CFS factor `35.314666213`; wind conversions (kph to m/s);
   temperature standardized to Celsius where required for model linking.
 
 See Also
@@ -30,7 +30,7 @@ Acc_Dep_ResSim_SacTrn
 from hec.heclib.dss import HecDss                     # HEC-DSS: open/read/write time series and metadata
 from hec.hecmath import HecMathException              # HEC math exception type for transform/read failures
 from hec.heclib.util.Heclib import UNDEFINED_DOUBLE   # Sentinel for undefined numeric values within HEC containers
-from hec.heclib.util import HecTime                   # HEC time conversion utilities (string ↔ HEC int time)
+from hec.heclib.util import HecTime                   # HEC time conversion utilities (string to HEC int time)
 from hec.io import DSSIdentifier                      # DSS pathname identifier (retained per original code)
 from hec.io import TimeSeriesContainer                # Container class for writing time series back to DSS
 import hec.hecmath.TimeSeriesMath as tsmath           # Time-series transform helpers (e.g., interval changes)
@@ -99,10 +99,10 @@ def fix_DMS_types_units(dss_file):
     -----
     - Sets `PER-AVER` for `/flow` or `/1Day/` (non-storage) records.
     - Converts unit codes:
-      * `tenths` → `FRAC` (values ÷ 10)
-      * `radians` → `deg` (values × 360 / 2π)
-      * `deg` → `radians` (values × 2π / 360)
-      * `kph` → `m/s` (values ÷ 3.6)
+      * `tenths` to `FRAC` (values / 10)
+      * `radians` to `deg` (values * 360 / 2 pi)
+      * `deg` to `radians` (values * 2 pi / 360)
+      * `kph` to `m/s` (values / 3.6)
     - Skips paired, scalar/text, and special mapping/control paths.
     - Unlike `fix_DMS_types_units_old`, this version reads/writes via
       the fast `dss.get()`/`dss.put()` `TimeSeriesContainer` path
@@ -146,7 +146,7 @@ def fix_DMS_types_units(dss_file):
                     tsc.fullName = '/'.join(rec_parts)
                     tsc.units = 'FRAC'                        # Standard fractional unit
                     for i in range(len(tsc.values)) :
-                        tsc.values[i] = tsc.values[i] / 10.0  # Convert tenths → fraction
+                        tsc.values[i] = tsc.values[i] / 10.0  # Convert tenths to fraction
                     #tsc.setStoreAsDoubles(True)         
                     dss.put(tsc)                              # Write converted series
                 
@@ -157,7 +157,7 @@ def fix_DMS_types_units(dss_file):
                     tsc.fullName = '/'.join(rec_parts)
                     tsc.units = 'deg'                         # Convert to degrees
                     for i in range(len(tsc.values)) :
-                        tsc.values[i] = tsc.values[i] / (2*3.141592653589793) * 360.0  # rad → deg
+                        tsc.values[i] = tsc.values[i] / (2*3.141592653589793) * 360.0  # rad to deg
                     #tsc.setStoreAsDoubles(True)         
                     dss.put(tsc)
                 
@@ -168,7 +168,7 @@ def fix_DMS_types_units(dss_file):
                     tsc.fullName = '/'.join(rec_parts)
                     tsc.units = 'radians'                     # Convert to radians
                     for i in range(len(tsc.values)) :
-                        tsc.values[i] = tsc.values[i] / 360.0 * (2*3.141592653589793)  # deg → rad
+                        tsc.values[i] = tsc.values[i] / 360.0 * (2*3.141592653589793)  # deg to rad
                     #tsc.setStoreAsDoubles(True)            
                     dss.put(tsc)
                 
@@ -208,7 +208,7 @@ def fix_DMS_types_units_old(dss_file):
     -----
     - Uses `dss.read` (math container) to set type and units, then writes
       the underlying `TimeSeriesContainer`.
-    - Includes additional `m/s → W2link` copy for wind speed workaround,
+    - Includes additional `m/s to W2link` copy for wind speed workaround,
       which the newer `fix_DMS_types_units` does not perform.
     """
     
@@ -358,7 +358,7 @@ def standardize_bc_temp_water_to_C(dss_file,output_dss_file):
             # Convert units if necessary
             if incoming_units == 'f' or incoming_units == 'degf':                
                 for i in range(len(tsc.values)) :
-                    tsc.values[i] = (tsc.values[i] - 32.0)*5.0/9.0  # F → C conversion             
+                    tsc.values[i] = (tsc.values[i] - 32.0)*5.0/9.0  # F to C conversion             
 
             # Write standardized series
             dss_out.put(tsc)                                  
@@ -410,7 +410,7 @@ def splice_lewiston_met_data(currentAlternative, rtw, met_dss_file, output_dss_f
     output_dss_file : str
         Destination DSS file for spliced outputs.
     months : list of int, optional
-        Month numbers to splice (default `[1, 2, 3]` → Jan–Mar).
+        Month numbers to splice (default `[1, 2, 3]` to Jan–Mar).
 
     Returns
     -------
@@ -419,7 +419,7 @@ def splice_lewiston_met_data(currentAlternative, rtw, met_dss_file, output_dss_f
 
     Notes
     -----
-    - Uses `DSS_Tools.replace_data` with a fixed set of Lewiston↔Redding pairs.
+    - Uses `DSS_Tools.replace_data` with a fixed set of Lewiston/Redding pairs.
     """
     
     # Lewiston is still dependent on using Met data from Redding during Jan-Feb-Mar.  Create those spliced Met data records.
@@ -466,7 +466,7 @@ def compute_river_balance_flows(currentAlternative, rtw, hydro_dss, obs_dss_file
 
     Notes
     -----
-    - Aligns and shifts Bend Bridge records (−1 day) to better balance with releases.
+    - Aligns and shifts Bend Bridge records (-1 day) to better balance with releases.
     """
     
     # balance at IGO
@@ -638,7 +638,7 @@ def combine_shasta_gates_flows(currentAlt,timewindow,hydro_dss,output_dss_file):
         # Create the flows for each gate elevation
         DSS_Tools.add_or_subtract_flows(currentAlt, timewindow, gate_recs, hydro_dss, 
                        [True for i in range(ngate)],
-                       out_rec, output_dss_file, what="n/a")  # Sum counts (treated as “flows” for add function)
+                       out_rec, output_dss_file, what="n/a")  # Sum counts (treated as "flows" for add function)
 
     # Combine river outlet flows
     # Example record:
@@ -922,7 +922,7 @@ def W2_shasta_TCD_flow(timewindow,hydro_dss,output_dss_file):
     Returns
     -------
     None
-        Writes hourly flows for each W2 sink (`TCDU/M/L/S1–3`, leakage `LKG1–6`,
+        Writes hourly flows for each W2 sink (`TCDU/M/L/S1-3`, leakage `LKG1-6`,
         and `TCD_down`) under `/SHA-W2-TCD-*/Flow//1Hour/Derived/`.
 
     Raises
@@ -1011,7 +1011,7 @@ def W2_shasta_TCD_flow(timewindow,hydro_dss,output_dss_file):
     # 2) divide flow at each level by 3 and assign as the point source
     #    sinks for each level. At this point, all flow is still on the highest
     #    open level
-    # 3) apply withdraw depth logic (≥3 ft below WSE) and leakage components
+    # 3) apply withdraw depth logic (>=3 ft below WSE) and leakage components
     for i in range(len(gen_flow)):
         # Get the withdrawal points associated with each elevation
         wp = get_w2_withdraw_points(nUpperGates[i],nMidGates[i],nLowerGates[i],nSideGates[i],WSE[i],withdraw_elevs)

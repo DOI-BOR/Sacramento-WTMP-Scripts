@@ -96,7 +96,7 @@ def replaceValuesOverThresh(currentAlt, dssFile, timewindow, primary_data_dsspat
         currentAlt.addComputeMessage('Converting cms to cfs')
         PrimaryTS_values = []  # Rebuild values with unit conversion applied
         for val in PrimaryTS.values:
-            PrimaryTS_values.append(val * 35.314666213)  # CMS → CFS
+            PrimaryTS_values.append(val * 35.314666213)  # CMS to CFS
 
     # --- Read the secondary (replacement source) and tertiary (existing/target) records ---
     SecondaryTS = dssFm.read(secondary_data_dsspath, starttime_str, endtime_str, False)

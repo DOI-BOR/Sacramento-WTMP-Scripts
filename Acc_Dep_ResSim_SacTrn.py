@@ -312,7 +312,7 @@ def computeAlternative(currentAlternative, computeOptions):
                       '::'.join([output_dss_file,'/MR Sac.-Trinity Lake/Swift Creek-Inflow/Flow//1Hour/231.9.125.1.1/']),
                       '::'.join([output_dss_file,'/MR Sac.-Trinity Lake/Trinity River-Inflow/Flow//1Hour/231.6.125.1.1/']),]
 
-    # Trinity outflows: generation, outlets (G1–G3), and spill
+    # Trinity outflows: generation, outlets (G1 to G3), and spill
     outflow_records = ['/MR Sac.-Trinity Lake/TRN-Generation Release/Flow//1Hour/231.5.125.2.1/',
                       '/MR Sac.-Trinity Lake/TRN-Outlet Release G1/Flow//1Hour/231.5.125.7.1/',
                       '/MR Sac.-Trinity Lake/TRN-Outlet Release G2/Flow//1Hour/231.5.125.8.1/',

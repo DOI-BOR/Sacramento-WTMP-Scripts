@@ -19,7 +19,7 @@ Notes
 -----
 - **Environment:** Jython in HEC-WAT using Python 2.7 syntax; relies on HEC-DSS APIs, 
   HecMath tools, and WAT runtime constructs (e.g., time windows, project directories).
-- **Units/Conversions:** Flow conversion uses CMS→CFS factor `35.314666213`.
+- **Units/Conversions:** Flow conversion uses CMS to CFS factor `35.314666213`.
   Stage may be converted from meters to feet; storage conversions use
   `cfs_2_acreft`/`acreft_2_cfs` derived from the balance period.
 - **Paths:** DSS paths may be provided as `file::/A/B/C/D/E/F/` to read from a
@@ -39,7 +39,7 @@ import math                                   # Standard library math utilities 
 from hec.heclib.dss import HecDss             # HEC-DSS API: open/read/write .dss files
 from hec.hecmath import HecMathException      # HEC math exceptions: catch read/transform failures
 from hec.heclib.util.Heclib import UNDEFINED_DOUBLE  # HEC sentinel for undefined/missing numeric values
-from hec.heclib.util import HecTime           # HEC time utility: string↔HEC time value conversions
+from hec.heclib.util import HecTime           # HEC time utility: string to HEC time value conversions
 from hec.io import DSSIdentifier              # HEC I/O identifier (imported for completeness; not directly used here)
 from hec.io import TimeSeriesContainer        # HEC I/O container used to assemble series for writing
 import hec.hecmath.TimeSeriesMath as tsmath   # HEC math utilities for transforming time series (e.g., intervals)
@@ -656,7 +656,7 @@ def predict_elevation(currentAlt, starttime_str, endtime_str, res_name, inflow_r
     Notes
     -----
     - Storage integration uses `cfs_2_acreft` derived from balance period.
-    - Elevation mapping uses linear interpolation on storage→elevation curve.
+    - Elevation mapping uses linear interpolation on storage to elevation curve.
     - Conic interpolation and evaporation are not yet supported here
       (see TODO comments in the function body).
     """
@@ -690,7 +690,7 @@ def predict_elevation(currentAlt, starttime_str, endtime_str, res_name, inflow_r
     storage = [storage,]                                           # Begin cumulative storage sequence
     elev_predicted = []                                            # Predicted elevations to be written
 
-    # Integrate inflow-outflow over the period and map storage→elevation
+    # Integrate inflow-outflow over the period and map storage to elevation
     for i in range(len(inflow_outflow)):
         storage.append( storage[-1] + inflow_outflow[i]*cfs_2_acreft )
         elev_predicted.append( linear_interpolation(elev_stor_area['stor'], elev_stor_area['elev'], storage[-1]) )
