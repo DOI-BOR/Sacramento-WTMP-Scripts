@@ -21,6 +21,63 @@ import Forecast_preprocess as fpp
 reload(fpp)
 
 def computeAlternative(currentAlternative, computeOptions):
+    """
+    Compute a forecast scripting alternative that distributes total
+    powerhouse flow across the Trinity/Shasta TCD (Temperature
+    Control Device) gate levels and point sinks, based on gate
+    status, water surface elevation (WSE), and generation flow.
+
+    NOTE: This function currently only sets up static reference
+    data (outlet order and sink elevations) and contains a detailed
+    plan, written as comments, for the flow-distribution algorithm.
+    The actual computation steps (loading DSS data, computing
+    gate/flow/WSE logic, and returning a result) are not yet
+    implemented below. This docstring documents both what is
+    implemented and the intended behavior described in those
+    planning comments, so the gap is clear.
+
+    Intended workflow (per in-line comments, not yet coded):
+      1. Load the TCD gate change summary from DSS. Resample to
+         regular hourly values if needed, and fill gaps.
+      2. Create summed totals of the number of open gates at the
+         upper, mid, lower, and side gate levels.
+      3. Load WSE (water surface elevation) data, converting units
+         to feet if necessary.
+      4. Load generation flow data, resampled to hourly. Only
+         perform calculations for timestamps where gate, flow, and
+         WSE data are all available.
+      5. Initialize flow at each of the 4 gate levels to 0.
+      6. Distribute flow across levels and point sinks:
+         - Assign all flow to the highest open gate level.
+         - Split that level's flow evenly across its 3 point sinks
+           (while all flow is still nominally on the highest open
+           level).
+         - Compare WSE minus 3 ft against each sink's elevation:
+           if the sink is submerged, record its flow, then check
+           if remaining flow is greater than zero.
+         - Remove any sinks above the WSE from further
+           consideration.
+         - If any submerged sinks remain in the current level,
+           assign all flow to those remaining 1 or 2 sinks.
+         - Otherwise, move to the next gate level down and
+           determine how many of ITS point sinks are submerged,
+           using a lookahead check against the following level's
+           first sink (index into first_next_gate).
+
+    Args:
+        currentAlternative: The alternative object being computed.
+            Must support addComputeMessage() for logging status
+            messages during the compute process.
+        computeOptions: The compute options/settings object, used
+            to control preprocessing behavior for this run.
+
+    Returns:
+        None: No return value is currently implemented. Based on
+            the pattern used elsewhere in this codebase, this
+            function is expected to eventually return True on
+            success (and possibly False on data validation
+            failure), once the flow-distribution logic is written.
+    """
     currentAlternative.addComputeMessage("Computing ScriptingAlternative:" + currentAlternative.getName())
     currentAlternative.addComputeMessage('\n')
 

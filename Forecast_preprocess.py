@@ -43,12 +43,15 @@ search_list = ["SacTrn", "Sacramento", "American", "Stanislaus"]  # Terms indica
 
 # initialize and search for unwanted paths
 matching_paths = []
+# for each path in sys.path, check if it contains any unwanted phrase
 for p in sys.path:
-    if any(phrase in p for phrase in search_list):  # Flag entries containing any study phrase
+    # if the path matches one of the unwanted phrases, mark it for removal
+    if any(phrase in p for phrase in search_list):
         matching_paths.append(p)
 
 # print paths containing unwanted phrases
 print("Paths to be removed:")
+
 for path in matching_paths:
     print(path)  # Log each matching path prior to removal
 
@@ -108,8 +111,8 @@ def interp(x, xp, fp, left=None, right=None):
       keep compatibility with Jython environments lacking NumPy/SciPy.
     - When `x` is a list, interpolation is applied element-wise.
     """
-    
-    # Handle behavior based on the input type
+
+    # if x is a list, interpolate each point recursively and return a list
     if isinstance(x, list):
         # Input type is a list. Recursively interp each of the list entries
         return [interp(point, xp, fp, left, right) for point in x] 
@@ -124,16 +127,16 @@ def interp(x, xp, fp, left=None, right=None):
             # Default right extrapolation value
             right = fp[-1]  
 
+        # if x is below the known range, clamp to the left value
         if x < xp[0]:
-            # Left extrapolation
-            return left  
-        
+            return left
+        # if x is above the known range, clamp to the right value
         elif x > xp[-1]:
             # Right extrapolation
             return right  
         
         else:
-            # Point is in the middle. Look for the point that brackets it.
+            # find the bracketing interval in xp and linearly interpolate within it
             for i in range(len(xp) - 1):
                 
                 # Find bracketing interval
@@ -149,32 +152,49 @@ def eq_temp(rtw, at, cl, ws, sr, td, eq_temp_out):
     """
     Compute equilibrium water temperature series and write multiple intervals.
 
-    Parameters
-    ----------
-    rtw : object
-        Run time window with `getStartTimeString()` / `getEndTimeString()`.
-    at : [str, str]
-        Pair `[dss_file_path, at_path]` for air temperature (°C).
-    cl : [str, str]
-        Pair `[dss_file_path, cloud_path]` for cloud fraction (0–1).
-    ws : [str, str]
-        Pair `[dss_file_path, wind_speed_path]` for wind speed (m/s).
-    sr : [str, str]
-        Pair `[dss_file_path, solar_radiation_path]` for shortwave irradiance (W/m²).
-    td : [str, str]
-        Pair `[dss_file_path, dewpoint_path]` for dew point (°C).
-    eq_temp_out : [str, str]
-        Pair `[output_dss_file_path, output_path]` for the equilibrium temperature series.
-
-    Returns
-    -------
-    None
-
-    Notes
-    -----
-    - Computes equilibrium temperature with `equilibrium_temp.calc_equilibrium_temp`.
-    - Writes instantaneous values and standardized 1-day / 1-week transforms to DSS.
+def eq_temp(rtw,at,cl,ws,sr,td,eq_temp_out):
     """
+    Compute equilibrium water temperature over the run time window
+    from meteorological inputs, and write the hourly result plus
+    daily and weekly standardized versions to DSS.
+
+    Args:
+        rtw: The run time window object, used to get the start and
+            end time strings for reading input data.
+        at (list): [dss_file_path, dss_record_path] for air
+            temperature.
+        cl (list): [dss_file_path, dss_record_path] for cloud
+            cover.
+        ws (list): [dss_file_path, dss_record_path] for wind speed.
+        sr (list): [dss_file_path, dss_record_path] for solar
+            radiation.
+        td (list): [dss_file_path, dss_record_path] for dew point
+            temperature.
+        eq_temp_out (list): [dss_file_path, dss_record_path]
+            specifying where to write the resulting equilibrium
+            temperature record.
+
+    Returns:
+        None. Writes the hourly equilibrium temperature record, and
+        its 1-day and 1-week standardized-interval versions, to the
+        DSS file specified in eq_temp_out.
+    """
+    starttime_str = rtw.getStartTimeString()
+    endtime_str = rtw.getEndTimeString()
+
+    # get at data and times in the formats needed
+    dssFm = HecDss.open(at[0])        
+    tsc = dssFm.read(at[1], starttime_str, endtime_str, False).getData()
+    tsc_int_times = tsc.times
+    dtt = DSS_Tools.hectime_to_datetime(tsc)
+    at_data = tsc.values
+    dssFm.close()
+    
+    # get the rest of the data over the same period
+    cl_data = DSS_Tools.data_from_dss(cl[0],cl[1],starttime_str,endtime_str)
+    ws_data = DSS_Tools.data_from_dss(ws[0],ws[1],starttime_str,endtime_str)
+    sr_data = DSS_Tools.data_from_dss(sr[0],sr[1],starttime_str,endtime_str)
+    td_data = DSS_Tools.data_from_dss(td[0],td[1],starttime_str,endtime_str)
     
     # Get the time window 
     starttime_str = rtw.getStartTimeString()  # Window start string
@@ -195,20 +215,29 @@ def eq_temp(rtw, at, cl, ws, sr, td, eq_temp_out):
     td_data = DSS_Tools.data_from_dss(td[0], td[1], starttime_str, endtime_str)  # Dew point
 
     # calc_equilibrium_temp(dtt, at, cl, sr, td, ws)
-    Te = equilibrium_temp.calc_equilibrium_temp(dtt, at_data, cl_data, sr_data, td_data, ws_data)  # Solver returns °C
+    Te = equilibrium_temp.calc_equilibrium_temp(dtt,at_data,cl_data,sr_data,td_data,ws_data)
+    
+    print('writing: ',eq_temp_out[1])
+    # build the time series container for the computed equilibrium temperature
+    tsc = TimeSeriesContainer()
+    tsc.times = tsc_int_times
+    tsc.fullName = eq_temp_out[1]
+    tsc.values = Te
+    tsc.units = 'C'
+    tsc.type = 'INST-VAL'
+    tsc.numberValues = len(tsc.values)
 
-    # Output the container
-    tsc = TimeSeriesContainer()  # Prepare container for instantaneous series
-    tsc.times = tsc_int_times  # Assign times (HEC numeric)
-    tsc.fullName = eq_temp_out[1]  # Destination path
-    tsc.values = Te  # Equilibrium temperature values
-    tsc.units = 'C'  # Degrees Celsius
-    tsc.type = 'INST-VAL'  # Instantaneous values
-    tsc.numberValues = len(tsc.values)  # Count
-
-    tsm = tsmath(tsc)  # Wrap in TimeSeriesMath for transforms
-    tsm_day = DSS_Tools.standardize_interval(tsm, '1day')  # Standardize to 1-day interval
-    tsm_wk = DSS_Tools.standardize_interval(tsm, '1week')  # Standardize to 1-week interval
+    # also produce daily and weekly standardized-interval versions of the same series
+    tsm = tsmath(tsc)
+    tsm_day = DSS_Tools.standardize_interval(tsm,'1day')
+    tsm_wk = DSS_Tools.standardize_interval(tsm,'1week')
+        
+    # write all three versions (hourly, daily, weekly) to the output DSS file
+    dssFmOut = HecDss.open(eq_temp_out[0])
+    dssFmOut.write(tsc)
+    dssFmOut.write(tsm_day)
+    dssFmOut.write(tsm_wk)
+    dssFmOut.close()
 
     dssFmOut = HecDss.open(eq_temp_out[0])  # Open output DSS file
     dssFmOut.write(tsc)  # Write instantaneous series
@@ -216,95 +245,91 @@ def eq_temp(rtw, at, cl, ws, sr, td, eq_temp_out):
     dssFmOut.write(tsm_wk)  # Write weekly series
     dssFmOut.close()  # Close output
 
-
-def storage_to_elev(res_name, elev_stor_area, forecast_dss, storage_rec, conic=False):
+def storage_to_elev(res_name,elev_stor_area,forecast_dss,storage_rec,conic=False):
     """
-    Convert a storage time series to elevation using tabulated curves.
+    Convert a reservoir storage time series into an elevation time
+    series, using a storage-elevation-area lookup table, and write
+    the result back to DSS under the same F-part.
 
-    Parameters
-    ----------
-    res_name : str
-        Reservoir name for the output C-part.
-    elev_stor_area : dict
-        Curve data with keys `'stor'` and `'elev'` (lists of breakpoints).
-    forecast_dss : str
-        DSS file path containing the storage record.
-    storage_rec : str
-        DSS pathname for the input storage record.
-    conic : bool, optional
-        Placeholder for conic interpolation (currently unsupported).
+    Args:
+        res_name (str): Reservoir name to place in the B-part of
+            the output DSS path.
+        elev_stor_area (dict): Lookup table with 'stor' and 'elev'
+            keys (parallel lists), used for interpolation.
+        forecast_dss (str): Path to the DSS file containing the
+            storage record and where the elevation record will be
+            written.
+        storage_rec (str): DSS path of the input storage record to
+            convert.
+        conic (bool, optional): If True, use conic interpolation
+            (not yet implemented - the function will exit).
+            Defaults to False (linear interpolation).
 
-    Returns
-    -------
-    None
-
-    Raises
-    ------
-    SystemExit
-        If `conic=True` (not implemented).
+    Returns:
+        None. Writes the converted elevation record back to
+        forecast_dss, reusing the same F-part as storage_rec but
+        with B-part set to res_name and C-part set to 'ELEV'.
     """
-    
-    # Open and read the content
-    dssFmRec = HecDss.open(forecast_dss)  # Open DSS file
-    tsc = dssFmRec.get(storage_rec, True)  # read ALL data in record
+    dssFmRec = HecDss.open(forecast_dss)
+    tsc = dssFmRec.get(storage_rec,True) # read ALL data in record
 
-    # Create a holder for the data
-    elev = []  
-    
-    # Handle the interpolation
+    elev = []
+    # if conic interpolation was requested, it is not supported yet, so exit
     if conic:
         # Use conic interpolation
         print('Conic interpolation of elevations from storage not supported yet.')
         sys.exit(-1)  # Preserve original error path
     else:
-        # Use linear interpolation
+        # for each stored value, linearly interpolate its corresponding elevation
         for j in range(tsc.numberValues):
-            elev.append(cbfj.linear_interpolation(elev_stor_area['stor'], elev_stor_area['elev'], tsc.values[j]))  # storage→elev
-            print('stor2elev: ', j, tsc.times[j], tsc.values[j])  # Diagnostic
+            elev.append(cbfj.linear_interpolation(elev_stor_area['stor'], elev_stor_area['elev'], tsc.values[j]))
+            print('stor2elev: ',j,tsc.times[j],tsc.values[j])
 
-    # Write the output to the dss file
-    recparts = tsc.fullName.split('/')  # Tokenize pathname for edits
-    recparts[2] = res_name  # Set C-part to reservoir name
-    recparts[3] = 'ELEV'  # Set parameter to ELEV
-    tsc.fullName = '/'.join(recparts)  # Reassemble pathname
-    tsc.units = 'ft'  # Feet
-    tsc.type = 'INST-VAL'  # Instantaneous values
-    tsc.values = elev  # Assign computed elevations
-    dssFmRec.write(tsc)  # Write to DSS
-    dssFmRec.close()  # Close file
+    # rewrite the DSS path's B-part (location) and C-part (parameter) for the elevation record
+    recparts = tsc.fullName.split('/')
+    recparts[2] = res_name
+    recparts[3] = 'ELEV'
+    tsc.fullName = '/'.join(recparts)
+    tsc.units = 'ft'
+    tsc.type = 'INST-VAL'
+    tsc.values = elev
+    dssFmRec.write(tsc)
+    dssFmRec.close()
 
-
-def invent_elevation(res_name, forecast_dss, storage_rec, elev_constant_ft):
+def invent_elevation(res_name,forecast_dss,storage_rec,elev_constant_ft):
     """
-    Invent an elevation time series from a storage record by constant fill.
+    Create a constant-value elevation time series (using the same
+    timestamps as an existing storage record) and write it to DSS.
 
-    Parameters
-    ----------
-    res_name : str
-        Reservoir name for C-part.
-    forecast_dss : str
-        DSS file path containing input record.
-    storage_rec : str
-        DSS pathname of a storage record whose timebase is reused.
-    elev_constant_ft : float
-        Constant elevation (ft) used to fill all timesteps.
+    This is used to fabricate a placeholder elevation record purely
+    for timing purposes, when an actual computed elevation is not
+    needed or not yet available.
 
-    Returns
-    -------
-    None
+    Args:
+        res_name (str): Reservoir name to place in the B-part of
+            the output DSS path.
+        forecast_dss (str): Path to the DSS file containing the
+            reference storage record and where the elevation record
+            will be written.
+        storage_rec (str): DSS path of an existing record whose
+            timestamps will be reused for the constant elevation
+            series.
+        elev_constant_ft (float): The constant elevation value, in
+            feet, to assign to every timestamp.
+
+    Returns:
+        None. Writes the constant elevation record to forecast_dss.
     """
+    dssFmRec = HecDss.open(forecast_dss)
+    tsc = dssFmRec.get(storage_rec,True)
     
-    # Open and read the data
-    dssFmRec = HecDss.open(forecast_dss)  # Open DSS
-    tsc = dssFmRec.get(storage_rec, True)  # Read entire record
-    recparts = tsc.fullName.split('/')  # Tokenize pathname
-    recparts[2] = res_name  # Set reservoir name
-    recparts[3] = 'ELEV'  # Parameter as ELEV
-    tsc.fullName = '/'.join(recparts)  # Reassemble pathname
-    tsc.units = 'ft'  # Feet
-    tsc.type = 'INST-VAL'  # Instantaneous
-    
-    # Fill with a constant value
+    # rewrite the DSS path's B-part (location) and C-part (parameter) for the elevation record
+    recparts = tsc.fullName.split('/')
+    recparts[2] = res_name
+    recparts[3] = 'ELEV'
+    tsc.fullName = '/'.join(recparts)
+    tsc.units = 'ft'
+    tsc.type = 'INST-VAL'
     tsc.values = [elev_constant_ft for j in range(tsc.numberValues)]
     
     # Write and close the series
@@ -314,41 +339,60 @@ def invent_elevation(res_name, forecast_dss, storage_rec, elev_constant_ft):
 
 def write_forecast_elevations(currentAlternative, rtw, forecast_dss, shared_dir):
     """
-    Generate and write forecast reservoir elevations for Shasta, Trinity, Whiskeytown.
+    Compute and write forecasted elevation time series for Shasta
+    Lake, Trinity Lake, and Whiskeytown Lake (plus placeholder
+    elevations for Keswick and Lewiston reservoirs), based on
+    storage-elevation-area relationships and mass-balance flow
+    routing.
 
-    Parameters
-    ----------
-    currentAlternative : object
-        Alternative used for logging messages.
-    rtw : object
-        Run time window object with start/end strings.
-    forecast_dss : str
-        Forecast DSS file path for reads/writes.
-    shared_dir : str
-        Path to shared directory containing elevation–storage–area CSVs.
+    Workflow (repeated per reservoir, with reservoir-specific
+    inflow/outflow records):
+      1. Determines the starting date for the elevation forecast
+         (the end of the prior month, or Dec 31 of the previous
+         year if the run starts in January).
+      2. Loads the storage-elevation-area lookup table for the
+         reservoir from a CSV file.
+      3. Converts both the monthly and daily (CVP-forecast) storage
+         records into elevation records via storage_to_elev.
+      4. For Keswick and Lewiston, invents placeholder elevation
+         records (constant values) from the Shasta/Trinity storage
+         records, since actual elevation isn't computed for these
+         but a record is needed for timing.
+      5. Resamples relevant flow-release records to daily
+         resolution.
+      6. Looks up the starting elevation from the monthly elevation
+         record.
+      7. Calls cbfj.predict_elevation to forecast elevation forward
+         using inflow and outflow records and a daily mass balance.
 
-    Returns
-    -------
-    None
+    Args:
+        currentAlternative: The alternative object being computed,
+            passed through to cbfj.predict_elevation for logging.
+        rtw: The run time window object, used to determine the
+            forecast start and end dates.
+        forecast_dss (str): Path to the shared forecast DSS file
+            containing storage and flow records, and where
+            elevation records will be written.
+        shared_dir (str): Directory containing the
+            storage-elevation-area CSV lookup files.
 
-    Notes
-    -----
-    - Converts monthly and daily storage to elevation using tabulated curves.
-    - Invents hourly/daily elevation placeholders for timing.
-    - Predicts daily elevation using a balance-flow approach from inflows/outflows.
+    Returns:
+        None. Writes multiple elevation and forecast records to
+        forecast_dss for Shasta, Trinity, and Whiskeytown.
     """
     
-    # Get date for starting elevation - look for end-of-month before start time
-    ht = HecTime(rtw.getStartTimeString())  # Parse HEC start time
-    
+    # get date for starting elevation - look for end-of-month before start time
+    ht = HecTime(rtw.getStartTimeString())
+    # if the run starts in January, the prior month-end is Dec 31 of the previous year
     if ht.month() == 1:
         start_str = dt.datetime(ht.year() - 1, 12, 31).strftime('%d%b%Y') + ' 2400'  # Previous year-end
     else:
-        start_dt = dt.datetime(ht.year(), ht.month(), 1)  # First of current month
-        start_dt = start_dt - dt.timedelta(days=1)  # Back up one day (EOM)
-        start_str = start_dt.strftime('%d%b%Y') + ' 2400'  # End-of-month time string
-    end_str = rtw.getEndTimeString()  # End of window
-
+        start_dt = dt.datetime(ht.year(),ht.month(),1)
+        start_dt = start_dt - dt.timedelta(days=1)
+        start_str = start_dt.strftime('%d%b%Y')+ ' 2400'
+    end_str = rtw.getEndTimeString()   
+    
+    # Shasta
     # covert storage to monthly elevation
     elev_stor_area = cbfj.read_elev_storage_area_file(os.path.join(shared_dir, 'AMR_scratch_shasta.csv'), 'Shasta')  # Load curve
     storage_to_elev('Shasta Lake', elev_stor_area, forecast_dss, '/SACRAMENTO RIVER/SHASTA LAKE/STORAGE//1MON/SACTRN_BC_SCRIPT/', conic=False)
@@ -372,13 +416,11 @@ def write_forecast_elevations(currentAlternative, rtw, forecast_dss, shared_dir)
                       '//SHASTA-SULANHARAS-IN/FLOW-IN//1DAY/SACTRN_BC_SCRIPT/',
                       '//SHASTA-MCCLOUD-IN/FLOW-IN//1DAY/SACTRN_BC_SCRIPT/',
                       '/SACRAMENTO RIVER/SHASTA LAKE/FLOW-ACC-DEP//1DAY/SACTRN_BC_SCRIPT/']  # this actually evap, but negative already, so it goes as inflow
-    
-    outflow_records = ['/SACRAMENTO RIVER/SHASTA LAKE/FLOW-RELEASE//1DAY/SACTRN_BC_SCRIPT/']  # Release as outflow
-    
-    starting_elevation = DSS_Tools.first_value(forecast_dss, '/SACRAMENTO RIVER/SHASTA LAKE/ELEV//1MON/SACTRN_BC_SCRIPT/', start_str, end_str)  # First elev
-    print('starting_elevation ', starting_elevation)  # Diagnostic
-    
-    cbfj.predict_elevation(currentAlternative, start_str, end_str, 'Shasta Lake', inflow_records, outflow_records, starting_elevation,
+    outflow_records = ['/SACRAMENTO RIVER/SHASTA LAKE/FLOW-RELEASE//1DAY/SACTRN_BC_SCRIPT/']
+    starting_elevation = DSS_Tools.first_value(forecast_dss,'/SACRAMENTO RIVER/SHASTA LAKE/ELEV//1MON/SACTRN_BC_SCRIPT/',start_str,end_str)
+    print('starting_elevation ',starting_elevation)
+    # forecast Shasta elevation forward using the daily inflow/outflow mass balance
+    cbfj.predict_elevation(currentAlternative, start_str,end_str, 'Shasta Lake', inflow_records, outflow_records, starting_elevation,
                          elev_stor_area, forecast_dss, '//Shasta Lake/ELEV-FORECAST//1DAY/AMER_BC_SCRIPT/', forecast_dss, shared_dir,
                          use_conic=False, alt_period=None, alt_period_string=None, balance_period_str='1Day')  # Predict daily elevation
 
@@ -396,13 +438,11 @@ def write_forecast_elevations(currentAlternative, rtw, forecast_dss, shared_dir)
                       '//SWIFT CR/FLOW-IN//1DAY/SACTRN_BC_SCRIPT/',
                       '//TRINITY RIVER/FLOW-IN//1DAY/SACTRN_BC_SCRIPT/',
                       '/TRINITY RIVER/TRINITY LAKE/FLOW-ACC-DEP//1DAY/SACTRN_BC_SCRIPT/']  # this actually evap, but negative already, so it goes as inflow
-
-    outflow_records = ['/TRINITY RIVER/TRINITY LAKE/FLOW-RELEASE//1DAY/SACTRN_BC_SCRIPT/']  # Outflow
-
-    starting_elevation = DSS_Tools.first_value(forecast_dss, '/TRINITY RIVER/TRINITY LAKE/ELEV//1MON/SACTRN_BC_SCRIPT/', start_str, end_str)
-    print('starting_elevation ', starting_elevation)  # Diagnostic
-
-    cbfj.predict_elevation(currentAlternative, start_str, end_str, 'Trinity Lake', inflow_records, outflow_records, starting_elevation,
+    outflow_records = ['/TRINITY RIVER/TRINITY LAKE/FLOW-RELEASE//1DAY/SACTRN_BC_SCRIPT/']
+    starting_elevation = DSS_Tools.first_value(forecast_dss,'/TRINITY RIVER/TRINITY LAKE/ELEV//1MON/SACTRN_BC_SCRIPT/',start_str,end_str)
+    print('starting_elevation ',starting_elevation)
+    # forecast Trinity elevation forward using the daily inflow/outflow mass balance
+    cbfj.predict_elevation(currentAlternative, start_str,end_str, 'Trinity Lake', inflow_records, outflow_records, starting_elevation,
                          elev_stor_area, forecast_dss, '//Trinity Lake/ELEV-FORECAST//1DAY/AMER_BC_SCRIPT/', forecast_dss, shared_dir,
                          use_conic=False, alt_period=None, alt_period_string=None, balance_period_str='1Day')  # Predict daily elevation
 
@@ -423,41 +463,36 @@ def write_forecast_elevations(currentAlternative, rtw, forecast_dss, shared_dir)
 
     outflow_records = ['/CLEAR CREEK/WHISKEYTOWN LAKE/FLOW-DIVERSION-SPRING-CR//1DAY/SACTRN_BC_SCRIPT/',
                        '/CLEAR CREEK/WHISKEYTOWN DAM/FLOW-RELEASE//1DAY/SACTRN_BC_SCRIPT/']
-
-    starting_elevation = DSS_Tools.first_value(forecast_dss, '/CLEAR CREEK/WHISKEYTOWN LAKE/ELEV//1MON/SACTRN_BC_SCRIPT/', start_str, end_str)
-    print('starting_elevation ', starting_elevation)  # Diagnostic
-
-    cbfj.predict_elevation(currentAlternative, start_str, end_str, 'Whiskeytown Lake', inflow_records, outflow_records, starting_elevation,
+    starting_elevation = DSS_Tools.first_value(forecast_dss,'/CLEAR CREEK/WHISKEYTOWN LAKE/ELEV//1MON/SACTRN_BC_SCRIPT/',start_str,end_str)
+    print('starting_elevation ',starting_elevation)
+    # forecast Whiskeytown elevation forward using the daily inflow/outflow mass balance
+    cbfj.predict_elevation(currentAlternative, start_str,end_str, 'Whiskeytown Lake', inflow_records, outflow_records, starting_elevation,
                          elev_stor_area, forecast_dss, '//Whiskeytown Lake/ELEV-FORECAST//1DAY/AMER_BC_SCRIPT/', forecast_dss, shared_dir,
                          use_conic=False, alt_period=None, alt_period_string=None, balance_period_str='1Day')  # Predict daily elevation
 
 
 def splice_met(currentAlternative, rtw, forecast_dss, output_dss):
     """
-    Splice meteorological records for Lewiston using Redding data in Jan–Mar.
+    Splice Redding (KRDD) meteorological data into the Lewiston
+    Reservoir meteorological records for January-March, since
+    Lewiston is still dependent on Redding data during those
+    months.
 
-    Parameters
-    ----------
-    currentAlternative : object
-        Alternative used for logging messages.
-    rtw : object
-        Run time window.
-    forecast_dss : str
-        Input DSS file containing met records.
-    output_dss : str
-        Output DSS file (may be same as input) for spliced results.
+    Args:
+        currentAlternative: The alternative object being computed,
+            passed through to DSS_Tools.replace_data for logging.
+        rtw: The run time window object, defining the period over
+            which data may be replaced.
+        forecast_dss (str): Path to the DSS file containing the
+            source (Redding) and target (Lewiston) records.
+        output_dss (str): Path to the DSS file where the spliced
+            records should be written.
 
-    Returns
-    -------
-    None
-
-    Notes
-    -----
-    - Replaces Lewiston met records for the months `[1, 2, 3]` with selected
-      Redding records using `DSS_Tools.replace_data`.
-    - Standardizes interval to `'1HOUR'` for consistent splicing coverage.
+    Returns:
+        None. Delegates the actual replacement to
+        DSS_Tools.replace_data for each Lewiston/Redding record
+        pair, limited to the specified months.
     """
-    
     # Lewiston is still dependent on using Met data from Redding during Jan-Feb-Mar.  Create those spliced Met data records...
     pairs = [
             ["/MR Sac.-Lewiston Res./TCAC1/Temp-Air//1Hour/SACTRN_BC_SCRIPT/",
@@ -485,112 +520,142 @@ def splice_met(currentAlternative, rtw, forecast_dss, output_dss):
 
 def study_dir_from_run_dir(run_dir):
     """
-    Derive study directory path from a run directory.
+    Derive the top-level study directory from a compute run
+    directory, by walking up three directory levels.
 
-    Parameters
-    ----------
-    run_dir : str
-        Path to a specific run directory.
+    Args:
+        run_dir (str): The full path to the current run's directory.
 
-    Returns
-    -------
-    str
-        Path to the top-level study directory.
+    Returns:
+        str: The path to the study directory (three levels above
+            run_dir).
     """
-    
-    # Remove last segment
-    w2sim, _ = os.path.split(run_dir)  
-    
-    # Remove 'w2sim' segment
-    runs_dir, _ = os.path.split(w2sim)  
-    
-    # Remove 'runs' segment
-    study_dir, _ = os.path.split(runs_dir)  
-    
-    # Return the top-level study dir
-    return study_dir  
+    w2sim,_ = os.path.split(run_dir)
+    runs_dir,_ = os.path.split(w2sim)
+    study_dir,_ = os.path.split(runs_dir)
+    return study_dir
 
-
-def model_dir_from_run_dir(run_dir, model_place, model_name):
+def model_dir_from_run_dir(run_dir,model_place,model_name):
     """
-    Construct a CE-QUAL-W2 model directory from the run directory.
+    Build the path to a specific CE-QUAL-W2 model directory, given
+    a run directory, a model "place" (subfolder), and a model name.
 
-    Parameters
-    ----------
-    run_dir : str
-        Path to a specific run directory.
-    model_place : str
-        Subfolder under 'cequal-w2' indicating the model place (e.g., 'SacTrn').
-    model_name : str
-        Model name folder under `model_place`.
+    Args:
+        run_dir (str): The full path to the current run's directory,
+            used to locate the parent study directory.
+        model_place (str): Subdirectory under 'cequal-w2' where the
+            model lives.
+        model_name (str): Name of the specific model directory.
 
-    Returns
-    -------
-    str
-        Full path to the W2 model directory.
+    Returns:
+        str: The full path to the requested W2 model directory.
     """
-    
-    # Ascend to study root
-    study_dir = study_dir_from_run_dir(run_dir)  
-    
-    # Build path
-    model_dir = os.path.join(study_dir, 'cequal-w2', model_place, model_name)  
-    
-    # Return model directory path
-    return model_dir  
-
+    study_dir = study_dir_from_run_dir(run_dir)
+    model_dir = os.path.join(study_dir,'cequal-w2',model_place,model_name)
+    return model_dir
 
 def forecast_data_preprocess_ResSim_5Res(currentAlternative, computeOptions):
     """
-    Preprocess data for the 5-reservoir ResSim forecast workflow.
+    Preprocess forecast boundary condition data for the ResSim
+    5-Reservoir Sacramento/Trinity system: fixes data types/units,
+    applies temperature lapse and met-data splicing, forecasts
+    reservoir elevations, computes equilibrium temperature, creates
+    a set of constant reference DSS records, and computes an
+    upstream (Shasta) target temperature from the downstream target.
 
-    Parameters
-    ----------
-    currentAlternative : object
-        Alternative context for logging and options retrieval.
-    computeOptions : object
-        Contains DSS filename, run directory, time window, etc.
+    Workflow:
+      1. Retrieves the DSS filename, run time window, run directory,
+         and shared data directory for this compute.
+      2. Fixes data types/units in the shared forecast DSS file via
+         DMS_preprocess.fix_DMS_types_units.
+      3. Applies an air temperature lapse rate correction for the
+         elevation at Shasta Lake.
+      4. Splices in Redding meteorological data for Lewiston during
+         Jan-Mar via splice_met.
+      5. Forecasts elevations for Shasta, Trinity, and Whiskeytown
+         (and placeholders for Keswick/Lewiston) via
+         write_forecast_elevations.
+      6. Computes equilibrium water temperature via eq_temp.
+      7. Creates a set of constant-value reference DSS records
+         (tiny flow, zero flow/gate, constant temperature targets,
+         etc.) used elsewhere in the model as fixed boundary
+         conditions.
+      8. Computes relative humidity from air temperature and dew
+         point.
+      9. Resamples the Keswick flow-release and target temperature
+         records to daily resolution.
+      10. Reads the configured downstream control location.
+      11. If the downstream location is at Shasta Dam itself
+          (location == 0), copies the target temperature directly.
+          Otherwise, back-calculates the required upstream (Shasta)
+          target temperature from the downstream target via
+          upstream_target.
 
-    Returns
-    -------
-    bool
-        True on successful preprocessing.
+    Args:
+        currentAlternative: The alternative object being computed.
+            Must support addComputeMessage() and getTimeStep() for
+            logging and retrieving the balance period.
+        computeOptions: The compute options/settings object. Must
+            support getDssFilename(), getRunTimeWindow(), and
+            getRunDirectory().
 
-    Notes
-    -----
-    Steps include DMS type/unit fixup, met lapse, met splicing, elevation writes,
-    equilibrium temperature computation, constant record creation, relative humidity
-    derivation, resampling for Keswick releases and targets, and upstream target
-    assembly based on downstream location.
+    Returns:
+        bool: True once all preprocessing steps have completed
+            successfully.
     """
+    dss_file = computeOptions.getDssFilename()
+    rtw = computeOptions.getRunTimeWindow()
     
-    # Get the setup information for the analysis
-    dss_file = computeOptions.getDssFilename()  # Current compute DSS file
-    rtw = computeOptions.getRunTimeWindow()     # Runtime window
+    run_dir = computeOptions.getRunDirectory()
+    project_dir = Project.getCurrentProject().getProjectDirectory()
+    currentAlternative.addComputeMessage('project_dir: ' + project_dir)
+    currentAlternative.addComputeMessage('run dir: ' + run_dir)
+    balance_period = currentAlternative.getTimeStep()
+    shared_dir = os.path.join(project_dir, 'shared')
 
-    run_dir = computeOptions.getRunDirectory()  # Path to this compute’s run directory
-    project_dir = Project.getCurrentProject().getProjectDirectory()  # Project dir for study
-    currentAlternative.addComputeMessage('project_dir: ' + project_dir)  # Log path
-    currentAlternative.addComputeMessage('run dir: ' + run_dir)  # Log path
-    balance_period = currentAlternative.getTimeStep()  # Current time step (not directly used)
-    shared_dir = os.path.join(project_dir, 'shared')  # Shared artifacts folder
-
-    forecast_dss = os.path.join(shared_dir, 'WTMP_SacTrn_Forecast.dss')  # Forecast DSS path
-    DMS_preprocess.fix_DMS_types_units(forecast_dss)  # Ensure types/units are expected formats
-
-    # Calculate meteorological airtemp lapse for the elevation at Shasta Lake
-    currentAlternative.addComputeMessage('lapse infile: ' + forecast_dss)
-    currentAlternative.addComputeMessage('lapse outfile: ' + forecast_dss)
+    forecast_dss = os.path.join(shared_dir,'WTMP_SacTrn_Forecast.dss')
+    DMS_preprocess.fix_DMS_types_units(forecast_dss)
     
-    # Apply lapse rate to AT
+    # calculate meteorological airtemp lapse for the elevation @ Shasta Lake
+    currentAlternative.addComputeMessage('lapse infile: '+forecast_dss)
+    currentAlternative.addComputeMessage('lapse outfile: '+forecast_dss)
     DSS_Tools.airtemp_lapse(forecast_dss, "/MR SAC.-CLEAR CR. TO SAC R./KRDD/TEMP-AIR//1HOUR/SACTRN_BC_SCRIPT/",
-                  0.7, forecast_dss, "Shasta_Lapse")  
+                  0.7, forecast_dss, "Shasta_Lapse")
+    
+    # splice in Redding met data for Lewiston during Jan-Mar
+    splice_met(currentAlternative, rtw, forecast_dss, forecast_dss)
 
-    # Splice met records for Lewiston
-    splice_met(currentAlternative, rtw, forecast_dss, forecast_dss)  
+    # forecast reservoir elevations for Shasta, Trinity, and Whiskeytown
+    write_forecast_elevations(currentAlternative, rtw, forecast_dss, shared_dir)
 
-    # Generate forecast elevations
-    write_forecast_elevations(currentAlternative, rtw, forecast_dss, shared_dir)  
+    currentAlternative.addComputeMessage("Computing equilibrium temperature, this may take a while...")
+    # eq_temp(rtw,at,cl,ws,sr,td,eq_temp_out)
+    eq_temp(rtw,
+            [forecast_dss,"/MR Sac.-Clear Cr. to Sac R./KRDD/Temp-Air//1Hour/SACTRN_BC_SCRIPT/"],
+            [forecast_dss,"/MR Sac.-Clear Cr. to Sac R./RRAC1/%-Cloud Cover-FRAC//1Hour/SACTRN_BC_SCRIPT/"],
+            [forecast_dss,"/MR Sac.-Clear Cr. to Sac R./KRDD/Speed-Wind//1Hour/SACTRN_BC_SCRIPT/"],
+            [forecast_dss,"/MR SAC.-CLEAR CR. TO SAC R./RRAC1/IRRAD-SOLAR//1HOUR/SACTRN_BC_SCRIPT/"],
+            [forecast_dss,"/MR Sac.-Clear Cr. to Sac R./KRDD/Temp-DewPoint//1Hour/SACTRN_BC_SCRIPT/"],
+            [forecast_dss,"/MR Sac.-Clear Cr. to Sac R./KRDD/Temp-Equil//1Hour/sactrn_bc_script/"]
+           )
+
+    #  Create a set of fixed constant-value reference records 
+    DSS_Tools.create_constant_dss_rec(currentAlternative, rtw, forecast_dss, constant=0.001, what='flow', 
+                        dss_type='PER-AVER', period='1DAY',cpart='TinyFlow',fpart='TinyFlow')
+    DSS_Tools.create_constant_dss_rec(currentAlternative, rtw, forecast_dss, constant=0.001, what='flow', 
+                        dss_type='PER-AVER', period='1HOUR',cpart='TinyFlow',fpart='TinyFlow')
+    DSS_Tools.create_constant_dss_rec(currentAlternative, rtw, forecast_dss, constant=10.0, what='temp-water', 
+                        dss_type='PER-AVER', period='1DAY',cpart='TENS',fpart='TENS')
+    DSS_Tools.create_constant_dss_rec(currentAlternative, rtw, forecast_dss, constant=0.0, what='flow', 
+                        dss_type='PER-AVER', period='1DAY',cpart='ZEROS',fpart='ZEROS')
+    DSS_Tools.create_constant_dss_rec(currentAlternative, rtw, forecast_dss, constant=0.0, what='flow', 
+                        dss_type='PER-AVER', period='1HOUR',cpart='ZEROS',fpart='ZEROS')   
+    DSS_Tools.create_constant_dss_rec(currentAlternative, rtw, forecast_dss, constant=0, what='gate', 
+                        dss_type='INST-VAL', period='1HOUR',cpart='ZEROS',fpart='ZEROS')
+    DSS_Tools.create_constant_dss_rec(currentAlternative, rtw, forecast_dss, constant=1, what='gate', 
+                        dss_type='INST-VAL', period='1HOUR',cpart='ONES',fpart='ONES')
+    DSS_Tools.create_constant_dss_rec(currentAlternative, rtw, forecast_dss, constant=13.0, what='temp-water', 
+                        dss_type='PER-AVER', period='1DAY',cpart='WHI-target-13',fpart='WHI-target-13')
 
     # Compute/Write EQ temperature
     currentAlternative.addComputeMessage("Computing equilibrium temperature, this may take a while...")  # Notice
@@ -647,8 +712,9 @@ def forecast_data_preprocess_ResSim_5Res(currentAlternative, computeOptions):
         DSS_Tools.copy_dss_ts(TT_rec, new_dss_rec=TT_W2_rec, dss_file_path=forecast_dss, checkMakeCelsius=True)  # Copy/convert to °C
     
     else:
-        # The compliacne location is downstream. Apply the regression.
-        upstream_target(forecast_dss, rtw,
+        # otherwise, back-calculate the upstream (Shasta) target temperature needed
+        # to meet the downstream target, accounting for travel time and heating
+        upstream_target(forecast_dss,rtw,
                         "/USBR/SHASTA/TEMP-WATER-TARGET//1Day/SACTRN_BC_SCRIPT/",
                         "/MR Sac.-Clear Cr. to Sac R./KRDD/Temp-Equil//1Day/sactrn_bc_script/",
                         "//SHASTA/FLOW-RELEASE-KESWICK-CFS//1Day/SACTRN_BC_SCRIPT/",
@@ -658,49 +724,45 @@ def forecast_data_preprocess_ResSim_5Res(currentAlternative, computeOptions):
     # Return that the setup is successful
     return True  
 
-
-def route_downstream(tKeswick, keswickFlowDaily, eqTempDaily, step, hour_of_day, loc):
+def route_downstream(tKeswick,keswickFlowDaily,eqTempDaily,step,hour_of_day,loc):
     """
-    Forward route temperature downstream using a simple exchange-with-atmosphere model.
+    Route a starting temperature downstream hour-by-hour, allowing
+    it to approach the equilibrium temperature at a fixed hourly
+    exchange rate, for the travel time appropriate to the given
+    location and flow.
 
-    Parameters
-    ----------
-    tKeswick : float
-        Temperature at Keswick [°C].
-    keswickFlowDaily : list of float
-        Daily Keswick flows [CFS].
-    eqTempDaily : list of float
-        Daily equilibrium temperatures [°C].
-    step : int
-        Current day index.
-    hour_of_day : int
-        Hour within day at which to start routing (0–23).
-    loc : int
-        Downstream location index (1=Hwy44, 2=CCR, 3=Ball's Ferry).
+    Args:
+        tKeswick (float): Starting temperature (typically at
+            Keswick) to route downstream.
+        keswickFlowDaily (list of float): Daily flow values, used
+            to determine travel time via travel_time_hrs.
+        eqTempDaily (list of float): Daily equilibrium temperature
+            values, which the routed temperature drifts toward each
+            hour.
+        step (int): Index into keswickFlowDaily/eqTempDaily
+            representing the starting day.
+        hour_of_day (int): Starting hour of day (0-23) for the
+            routing simulation.
+        loc (int): Downstream location index, passed to
+            travel_time_hrs to determine travel distance/time.
 
-    Returns
-    -------
-    float
-        Routed temperature at the downstream location [°C].
-
-    Notes
-    -----
-    Applies a fixed exchange coefficient (0.015 per hour) and steps through
-    `hrs` travel time computed by `travel_time_hrs`.
+    Returns:
+        float: The temperature after being routed downstream for
+            the computed travel time.
     """
-    
-    exchCoef = 0.015  # hourly exchange rate between atmosphere and river temp
+    exchCoef = 0.015 # hourly exchange rate between atmosphere and river temp
 
-    hrs = travel_time_hrs(loc, keswickFlowDaily[step])  # loc 2 = CCR
-    t = tKeswick  # Initialize routed temp
-    i = step  # Start at current day
-    imax = len(eqTempDaily)  # Max index bound
-    h = hour_of_day  # Current hour
-    
+    hrs = travel_time_hrs(loc,keswickFlowDaily[step]) # loc 2 = CCR
+    t = tKeswick
+    i = step # + keswickResidenceTime ?
+    imax = len(eqTempDaily)
+    h = hour_of_day
+    # step forward hour by hour for the computed travel time, letting temperature
+    # drift toward the equilibrium temperature at the exchange rate
     for k in range(hrs):
-        deltaTemp = (eqTempDaily[i] - t) * exchCoef  # Relax toward eq temp
-        t += deltaTemp  # Update
-
+        deltaTemp = (eqTempDaily[i] - t) * exchCoef
+        t += deltaTemp
+        # advance to the next day's equilibrium temperature index once past hour 23
         if h == 23:
             h = 0  # Wrap hour
             i = min(imax - 1, i + 1)  # Advance day with bound
@@ -722,17 +784,29 @@ def travel_time_hrs(loc, keswickFlow):
     keswickFlow : float
         Keswick release flow [CFS].
 
-    Returns
-    -------
-    int
-        Travel time in whole hours.
-
-    Raises
-    ------
-    NotImplementedError
-        For unsupported location indices.
+def travel_time_hrs(loc,keswickFlow):
     """
-    
+    Estimate the downstream travel time, in whole hours, for water
+    released from Keswick to reach a given downstream location,
+    using a power-law approximation of river velocity based on
+    flow.
+
+    Args:
+        loc (int): Downstream location index. Must be one of:
+            1 (Highway 44), 2 (CCR), or 3 (Ball's Ferry).
+        keswickFlow (float): Flow rate at Keswick, in cfs, used to
+            estimate velocity.
+
+    Returns:
+        int: Estimated travel time in whole hours. Returns 0 if the
+            computed velocity is not positive (with a warning
+            printed).
+
+    Raises:
+        NotImplementedError: If loc is not one of the recognized
+            location indices (1, 2, or 3).
+    """
+    # determine the downstream distance in feet based on the requested location
     if loc == 1:  # Highway 44
         downstreamDistance = 30000.  # in feet
     
@@ -764,29 +838,23 @@ def travel_time_hrs(loc, keswickFlow):
 
 def fractional_month(date_obj):
     """
-    Compute fractional month and weights for previous/current/next months.
+    Args:
+        date_obj (datetime.datetime): The date to evaluate.
 
-    Parameters
-    ----------
-    date_obj : datetime.datetime
-        Timestamp to analyze.
-
-    Returns
-    -------
-    tuple
-        `(fractional_month, fractional_previous, fractional_current, fractional_next)`:
-        - fractional_month : float
-            Fraction into month from 0 to <1.
-        - fractional_previous : float
-            Weight applied to previous month.
-        - fractional_current : float
-            Weight applied to current month.
-        - fractional_next : float
-            Weight applied to next month.
-
-    Notes
-    -----
-    Weights sum to 1.0 with a pivot at 0.5 (mid-month).
+    Returns:
+        tuple: A 4-tuple of floats:
+            fractional_month (float): Position of the day within
+                the month, from 0.0 (first day) to just under 1.0
+                (last day).
+            fractional_previous (float): Blending weight toward the
+                previous month. Non-zero only when date_obj falls
+                in the first half of the month.
+            fractional_current (float): Blending weight toward the
+                current month. Always the largest of the three
+                weights, peaking mid-month.
+            fractional_next (float): Blending weight toward the
+                next month. Non-zero only when date_obj falls in
+                the second half of the month.
     """
 
     year = date_obj.year  # Year of date
@@ -797,10 +865,12 @@ def fractional_month(date_obj):
     _, days_in_month = calendar.monthrange(year, month)  # (weekday_of_first, days)
 
     # Calculate the fractional month. Use 1.0 to force float division.
-    fractional_month = (day - 1.0) / days_in_month  # Fraction [0, 1)
-    fractional_previous = 0.0  # Default previous weight
-    fractional_next = 0.0  # Default next weight
-
+    fractional_month = (day - 1.0) / days_in_month
+    fractional_previous = 0.0
+    fractional_next = 0.0
+    
+    # determine whether the date falls in the first or second half of the month,
+    # which controls whether it blends toward the previous or next month
     if fractional_month > 0.5:
         fractional_current = (1.0 - fractional_month) + 0.5  # Late month: more current+next
         fractional_next = 1.0 - fractional_current  # Remaining weight goes to next
@@ -817,29 +887,27 @@ def get_step_future_and_RiverHrs(wqTargetDaily, keswickFlowDaily, step, loc):
     """
     Determine future step index and river travel hours given flow and location.
 
-    Parameters
-    ----------
-    wqTargetDaily : list of float
-        Daily downstream WQ target temperatures [°C].
-    keswickFlowDaily : list of float
-        Daily Keswick flows [CFS].
-    step : int
-        Current step (day index).
-    loc : int
-        Downstream location index (e.g., 2=CCR).
-
-    Returns
-    -------
-    (int, int)
-        `(step_future, hrs)` where `step_future` is the future day index after
-        travel/residence and `hrs` is the integer river travel time in hours.
-
-    Notes
-    -----
-    Combines `travel_time_hrs` with a Keswick pool fraction representing residence
-    time effects (bounded by calibration multiplier).
+def get_step_future_and_RiverHrs(wqTargetDaily,keswickFlowDaily,step,loc):
     """
+    Determine the future daily time step that corresponds to water
+    released today, once downstream river travel time and Keswick
+    reservoir residence time are both accounted for.
 
+    Args:
+        wqTargetDaily (list): Daily water quality target series,
+            used only for its length to clamp the future step index.
+        keswickFlowDaily (list of float): Daily flow values at
+            Keswick, used to estimate travel time.
+        step (int): Index of the current daily time step.
+        loc (int): Downstream location index, passed to
+            travel_time_hrs.
+
+    Returns:
+        tuple: (step_future, hrs) where step_future is the clamped
+            future daily index accounting for travel and residence
+            time, and hrs is the estimated river travel time in
+            hours.
+    """
     # Power law approximation for velocity in the Sacramento River
     hrs = travel_time_hrs(loc, keswickFlowDaily[step])  # Compute travel hours
 
@@ -861,50 +929,50 @@ def get_step_future_and_RiverHrs(wqTargetDaily, keswickFlowDaily, step, loc):
 # Backcalculate the temperature required at Shasta Dam from the downstream temperature target
 def backRouteWQTarget2(eqTempDaily, targetTempFuture, sha2kes_diff, hrs, step, loc, hour_of_day=10):
     """
-    Back-route downstream target temperature to required outlet temperature at Shasta.
+    Back-calculate the outlet (Shasta Dam) temperature required so
+    that, after Keswick heating/cooling and downstream travel time,
+    the resulting temperature meets a given future downstream
+    target, using an iterative bisection-style search.
 
-    Parameters
-    ----------
-    eqTempDaily : list of float
-        Daily equilibrium temperatures [°C].
-    targetTempFuture : float
-        Downstream target temperature in the future [°C].
-    sha2kes_diff : float
-        Temperature difference term between Shasta and Keswick (diff may be negative if heating).
-    hrs : int
-        River travel time in hours.
-    step : int
-        Current day index.
-    loc : int
-        Downstream location index.
-    hour_of_day : int, optional
-        Hour within day to start routing (default: 10).
+    Args:
+        eqTempDaily (list of float): Daily equilibrium temperature
+            values used during downstream routing.
+        targetTempFuture (float): The desired downstream
+            temperature target at the future time step.
+        sha2kes_diff (float): Temperature difference between Shasta
+            outlet and Keswick (negative if heating occurs in
+            Keswick reservoir).
+        hrs (int): Downstream travel time in hours, used for
+            routing.
+        step (int): Current daily time step index, used as the
+            starting point for downstream routing.
+        loc (int): Downstream location index (used only for
+            informational/logging purposes here; routing itself
+            uses hrs).
+        hour_of_day (int, optional): Starting hour of day for the
+            routing simulation. Defaults to 10.
 
-    Returns
-    -------
-    float
-        Required outlet temperature at Shasta [°C] to meet downstream target.
+    Returns:
+        float: The estimated required outlet temperature at Shasta
+            Dam.
 
-    Raises
-    ------
-    ValueError
-        If bracketing fails and the target cannot be interpolated safely (except certain cases).
-
-    Notes
-    -----
-    - Searches over a bracket [tSearchMin, tSearchMax] using a fixed number of iterations.
-    - Switches to simple assignment when `cantBeMet=True`; otherwise linear interpolation of bracket.
+    Raises:
+        ValueError: If the search range does not bracket the target
+            temperature and the target also cannot be met at the
+            lowest tested outlet temperature.
     """
+    #exchCoef = 0.0098  # exchange rate between atmosphere and river temp
+    exchCoef = 0.015 # exchange rate between atmosphere and river temp
+    tSearchMin = targetTempFuture + sha2kes_diff - 6.
+    tSearchMax = tSearchMin + 18.
+    numIters = 51
+    bracketed = False
+    cantBeMet = False
+    #network.printMessage('Keswick vars ' + str(keswickResAvgTemp) + ', ' + str(kesFraction))
+    #network.printMessage('Travel time steps ' + str(travTimeSteps))
     
-    # Set the initial search information
-    exchCoef = 0.015  # exchange rate between atmosphere and river temp
-    tSearchMin = targetTempFuture + sha2kes_diff - 6.  # Lower search bound
-    tSearchMax = tSearchMin + 18.  # Upper search bound
-    numIters = 51  # Number of samples
-    bracketed = False  # Flag for successful bracketing
-    cantBeMet = False  # Flag for infeasible target
-    
-    # Loop and search until converged or the number of iterations are met
+    # sweep candidate outlet temperatures across the search range, routing each
+    # downstream, to find where the routed result brackets the target temperature
     for j in range(numIters):
         # Candidate outlet temp
         outletTemp = tSearchMin + float(j) / float(numIters + 1) * (tSearchMax - tSearchMin)  
@@ -914,11 +982,11 @@ def backRouteWQTarget2(eqTempDaily, targetTempFuture, sha2kes_diff, hrs, step, l
         t1 = 1  # Placeholder variable retained from original
         
         # Route downstream
-        i = step  # Day index
-        imax = len(eqTempDaily)  # Bounds
-        h = hour_of_day  # Hour to start
-
-        # Loop over the hours 
+        i = step 
+        imax = len(eqTempDaily)
+        h = hour_of_day
+        # step forward hour by hour for the travel time, letting temperature drift
+        # toward the equilibrium temperature at the exchange rate
         for k in range(hrs):
             deltaTemp = (eqTempDaily[i] - t) * exchCoef  # Relax toward equilibrium
             t += deltaTemp  # Update routed temp
@@ -934,9 +1002,10 @@ def backRouteWQTarget2(eqTempDaily, targetTempFuture, sha2kes_diff, hrs, step, l
 
         # Check for hte convergence
         if j == 0:
-            prevT = t  # Establish previous
-            prevOutletT = outletTemp  # Track previous candidate
-
+            prevT = t
+            prevOutletT = outletTemp
+        # check whether the routed temperature crossed the target between this
+        # iteration and the previous one, in either direction, to bracket the answer
         if t > targetTempFuture and prevT < targetTempFuture:
             upperOutletT = outletTemp
             upperT = t
@@ -962,7 +1031,7 @@ def backRouteWQTarget2(eqTempDaily, targetTempFuture, sha2kes_diff, hrs, step, l
         prevT = t  # Update previous
         prevOutletT = outletTemp  # Update previous outlet temp
 
-    # Validate the estimate from the search
+    # resolve the final outlet temperature based on how the search resolved
     if bracketed:
         # Linear interpolation
         targetTemp = (targetTempFuture - lowerT) / (upperT - lowerT) * (upperOutletT - lowerOutletT) + lowerOutletT  # Backrouted TT
@@ -978,53 +1047,45 @@ def backRouteWQTarget2(eqTempDaily, targetTempFuture, sha2kes_diff, hrs, step, l
             # network.printMessage('Target Temperature Downstream' + str(targetTempFuture))
             raise ValueError('Outlet temperature not bracketed')  # No safe interpolation
 
-    # Return the required outlet temp at Shasta
-    return targetTemp  
-
-
-def upstream_target(forecastDSS, rtw, downstreamTT_rec, eqTemp_rec, kesFlow_rec, sppFlow_rec, loc, TT_W2_rec, ResSimRiver=True):
+def upstream_target(forecastDSS,rtw,downstreamTT_rec,eqTemp_rec,kesFlow_rec,sppFlow_rec,loc,TT_W2_rec,ResSimRiver=True):
     """
-    Construct upstream target temperature at Shasta from downstream targets.
+    Back-calculate the required Shasta Dam (upstream) target
+    temperature from a downstream temperature target, using
+    location-specific regression coefficients and (for ResSim-based
+    routing) hour-by-hour downstream routing with equilibrium
+    temperature.
 
-    Parameters
-    ----------
-    forecastDSS : str
-        DSS file path for forecast datasets.
-    rtw : object
-        Run time window.
-    downstreamTT_rec : str
-        DSS pathname for downstream target temperature (daily).
-    eqTemp_rec : str
-        DSS pathname for daily equilibrium temperatures used in routing.
-    kesFlow_rec : str
-        DSS pathname for Keswick daily flows [CFS].
-    sppFlow_rec : str
-        DSS pathname for Spring Creek diversion flows (used in regressions).
-    loc : int
-        Downstream location index (currently must be 2).
-    TT_W2_rec : str
-        Output DSS pathname for upstream target temperature.
-    ResSimRiver : bool, optional
-        If True, apply ResSim river routing; else use regression direct difference.
+    Args:
+        forecastDSS (str): Path to the DSS file containing the
+            downstream target, equilibrium temperature, and flow
+            records.
+        rtw: The run time window object, used to get the start and
+            end time strings for reading input data.
+        downstreamTT_rec (str): DSS path of the downstream target
+            temperature record.
+        eqTemp_rec (str): DSS path of the equilibrium temperature
+            record.
+        kesFlow_rec (str): DSS path of the Keswick flow record.
+        sppFlow_rec (str): DSS path of the Spring Creek Powerplant
+            (or similar) flow record.
+        loc (int): Downstream location index. Currently only loc==2
+            is supported.
+        TT_W2_rec (str): DSS path where the resulting upstream
+            (Shasta) target temperature record should be written.
+        ResSimRiver (bool, optional): If True, use the ResSim-river
+            regression coefficients and full hour-by-hour
+            back-routing via backRouteWQTarget2. If False, use the
+            CCR regression coefficients and a simpler direct offset.
+            Defaults to True.
 
-    Returns
-    -------
-    None
+    Returns:
+        None. Writes the computed upstream target temperature
+        record to forecastDSS at TT_W2_rec.
 
-    Raises
-    ------
-    ValueError
-        If `loc` is not among supported indices (presently `{2}` only).
-
-    Notes
-    -----
-    - Applies month-dependent regression coefficients to compute temperature
-      difference (TTDiff) between downstream and upstream.
-    - When `ResSimRiver` is True, back-routes downstream targets accounting
-      for travel time/atmospheric exchange; otherwise adds TTDiff directly.
+    Raises:
+        ValueError: If loc is not 2 (the only currently supported
+            location).
     """
-    
-    # Set the regression coeffients for keswick
     kes2sha_coeffs = [
         [ 0.5026658277531562 , -0.023436069646011252 , -0.06557997671807375 , -4.685462463211685e-06 ],
         [ -1.0945789953889893 , -0.03547324181218445 , 0.3634668604715895 , -9.493485475182071e-05 ],
@@ -1056,7 +1117,7 @@ def upstream_target(forecastDSS, rtw, downstreamTT_rec, eqTemp_rec, kesFlow_rec,
         [ 4.138461583069988 , -0.036555149612575485 , -0.8940381389461702 , 3.245473186093828e-05 ],
     ]
 
-    # todo: generalize this so that it handles all model coupling
+    # select the correct regression coefficient set based on location and river type
     if loc == 2:
         if ResSimRiver:
             coeffs = kes2sha_coeffs  # Use Keswick→Shasta coefficients when routing via river model
@@ -1069,25 +1130,16 @@ def upstream_target(forecastDSS, rtw, downstreamTT_rec, eqTemp_rec, kesFlow_rec,
 
     # Load datasets over rtw, must be same lengths
     # TODO: should check units, expecting CFS and C
-    # Get the times of the series
-    starttime_str = rtw.getStartTimeString()  # Window start
-    endtime_str = rtw.getEndTimeString()  # Window end
+    starttime_str = rtw.getStartTimeString()
+    endtime_str = rtw.getEndTimeString()
+    dssFm = HecDss.open(forecastDSS)        
+    tsc = dssFm.read(downstreamTT_rec, starttime_str, endtime_str, False).getData()
+    tsc_int_times = tsc.times
+    dtt = DSS_Tools.hectime_to_datetime(tsc)
+    downstreamTT = tsc.values
+    TT_units = str(tsc.units)
     
-    # Open the file
-    dssFm = HecDss.open(forecastDSS)  # Open forecast DSS
-    
-    # Read the data
-    tsc = dssFm.read(downstreamTT_rec, starttime_str, endtime_str, False).getData()  # Read downstream TT
-    tsc_int_times = tsc.times  # Save times for writing
-    
-    # Convert the datetimes
-    dtt = DSS_Tools.hectime_to_datetime(tsc)  # Convert to Python datetimes
-    
-    # Read the values and units
-    downstreamTT = tsc.values  # Values
-    TT_units = str(tsc.units)  # Units string
-    
-    # Convert from F to C, if necessary
+    # if the downstream target is in Fahrenheit, convert it to Celsius
     if TT_units.lower() == 'f' or TT_units.lower() == 'degF':
         for i, TT in enumerate(downstreamTT):
             downstreamTT[i] = (TT - 32.0) * 5.0 / 9.0  # Convert to °C
@@ -1106,8 +1158,9 @@ def upstream_target(forecastDSS, rtw, downstreamTT_rec, eqTemp_rec, kesFlow_rec,
     # first daily eqTemp seem to often be bad, maybe timezone/DSS reading issue
     eqTemp[0] = eqTemp[1]  # Replace first value with second (original behavior preserved)
 
-    # Upstream target temperature series
-    shastaTT = []  
+    shastaTT = []
+    # for each downstream target temperature value, back-calculate the required
+    # upstream (Shasta) temperature using month-blended regression coefficients
     for i, TT in enumerate(downstreamTT):
         mo_i = dtt[i].month - 1  # Current month index [0..11]
         mo_i_prev = mo_i - 1 if mo_i - 1 >= 0 else 11  # Previous month
@@ -1118,14 +1171,8 @@ def upstream_target(forecastDSS, rtw, downstreamTT_rec, eqTemp_rec, kesFlow_rec,
         a1, b1, c1, d1 = coeffs[mo_i]  # Current month coefficients
         a2, b2, c2, d2 = coeffs[mo_i]  # (Original code: next uses current coefficients; preserved)
 
-        print(i, ' : ', dtt[i].year, dtt[i].month, dtt[i].day, dtt[i].hour, ' : ', TT, eqTemp[i], kesFlow[i], sppFlow[i])  # Diagnostic
-        upstreamTT = -1  # Placeholder initial value
-
-        TTDiff = pFrac * (a0 + b0 * eqTemp[i] + c0 * math.log10(kesFlow[i]) + d0 * sppFlow[i]) + \
-                 cFrac * (a1 + b1 * eqTemp[i] + c1 * math.log10(kesFlow[i]) + d1 * sppFlow[i]) + \
-                 nFrac * (a2 + b2 * eqTemp[i] + c2 * math.log10(kesFlow[i]) + d2 * sppFlow[i])  # Month-weighted difference
-
-        # Adjust based on the target location
+        # if using the full ResSim river model, back-route hour-by-hour to solve for
+        # the outlet temp; otherwise apply the simpler direct regression offset
         if ResSimRiver:
             i_future, hrs = get_step_future_and_RiverHrs(downstreamTT, kesFlow, i, loc)  # Step ahead and hours
             upstreamTT = backRouteWQTarget2(eqTemp, downstreamTT[i_future], TTDiff, hrs, i, loc, hour_of_day=10)  # Back-route to outlet temp
@@ -1150,35 +1197,21 @@ def upstream_target(forecastDSS, rtw, downstreamTT_rec, eqTemp_rec, kesFlow_rec,
 
 def get_downstream_loc(forecastDSS):
     """
-    Read downstream control location index from DSS.
+    Read the configured downstream control location index from a
+    dedicated integer DSS record.
 
-    Parameters
-    ----------
-    forecastDSS : str
-        DSS file containing the downstream control location record.
+    Args:
+        forecastDSS (str): Path to the DSS file containing the
+            downstream control location record.
 
-    Returns
-    -------
-    int
-        Location index parsed from the DSS record text.
-
-    Notes
-    -----
-    Expects the linked record `//DOWNSTREAM_CONTROL_LOC///INTEGER/SACTRN_TARGET_TEMP/`
-    to contain an integer in its text field.
+    Returns:
+        int: The downstream control location index (e.g. 0 for
+            Shasta Dam, or another value for a downstream point).
     """
-    
-    # Open the DSS file
-    dssFm = HecDss.open(forecastDSS)
-    
-    # Get teh compliance location
-    tsc = dssFm.get('//DOWNSTREAM_CONTROL_LOC///INTEGER/SACTRN_TARGET_TEMP/', True)  # this should be passed in a linked record at some point
-    
-    # Parse out the values
-    loc = int(str(tsc.getText()).strip())  # Parse integer from text
-    print('Downstream Loc: ', str(tsc))  # Diagnostic print of container
-    
-    # Close the DSS file
+    dssFm = HecDss.open(forecastDSS)        
+    tsc = dssFm.get('//DOWNSTREAM_CONTROL_LOC///INTEGER/SACTRN_TARGET_TEMP/', True) # this should be passed in a linked record at some point
+    loc = int(str(tsc.getText()).strip())
+    print('Downstream Loc: ',str(tsc))
     dssFm.close()
     
     # Return the location to the calling function
@@ -1187,25 +1220,55 @@ def get_downstream_loc(forecastDSS):
 
 def forecast_data_preprocess_W2_5Res(currentAlternative, computeOptions):
     """
-    Preprocess data for the 5-reservoir W2 forecast workflow.
+    Preprocess forecast boundary condition data for the CE-QUAL-W2
+    5-Reservoir Sacramento/Trinity system: fixes data types/units,
+    applies met-data splicing, forecasts reservoir elevations,
+    computes equilibrium temperature, creates a set of constant
+    reference DSS records, and computes an upstream (Shasta) target
+    temperature from the downstream target.
 
-    Parameters
-    ----------
-    currentAlternative : object
-        Alternative context for logging and options retrieval.
-    computeOptions : object
-        Contains DSS filename, run directory, time window, etc.
+    This is the W2-specific counterpart to
+    forecast_data_preprocess_ResSim_5Res: it performs a similar set
+    of steps but omits the ResSim-specific air temperature lapse
+    correction and gate-related constant records, and always uses
+    the simpler (non-ResSim-river) upstream target calculation.
 
-    Returns
-    -------
-    bool
-        True on successful preprocessing.
+    Workflow:
+      1. Retrieves the DSS filename, run time window, run directory,
+         and shared data directory for this compute.
+      2. Fixes data types/units in the shared forecast DSS file via
+         DMS_preprocess.fix_DMS_types_units.
+      3. Splices in Redding meteorological data for Lewiston during
+         Jan-Mar via splice_met.
+      4. Computes equilibrium water temperature via eq_temp.
+      5. Forecasts elevations for Shasta, Trinity, and Whiskeytown
+         via write_forecast_elevations.
+      6. Creates a set of constant-value reference DSS records used
+         elsewhere in the model as fixed boundary conditions.
+      7. Resamples the Keswick flow-release and target temperature
+         records to daily resolution.
+      8. Reads the configured downstream control location.
+      9. If the downstream location is at Shasta Dam itself
+         (location == 0), copies the target temperature directly.
+         Otherwise, back-calculates the required upstream (Shasta)
+         target temperature from the downstream target via
+         upstream_target, using the simpler (non-ResSim-river)
+         regression path.
 
-    Notes
-    -----
-    Similar to the ResSim preprocessing, but tailored for W2 with specific
-    resampling and upstream TT assembly flows.
+    Args:
+        currentAlternative: The alternative object being computed.
+            Must support addComputeMessage() and getTimeStep() for
+            logging and retrieving the balance period.
+        computeOptions: The compute options/settings object. Must
+            support getDssFilename(), getRunTimeWindow(), and
+            getRunDirectory().
+
+    Returns:
+        bool: True once all preprocessing steps have completed
+            successfully.
     """
+    dss_file = computeOptions.getDssFilename()
+    rtw = computeOptions.getRunTimeWindow()
     
     # Setup the anlysis items
     dss_file = computeOptions.getDssFilename()  # Compute DSS file
@@ -1219,38 +1282,39 @@ def forecast_data_preprocess_W2_5Res(currentAlternative, computeOptions):
     shared_dir = os.path.join(project_dir, 'shared')  # Shared dir
 
     # output from scripting all goes to the <study>_Forecast.dss file.
-    forecast_dss = os.path.join(shared_dir, 'WTMP_SacTrn_Forecast.dss')  # Forecast DSS
-    DMS_preprocess.fix_DMS_types_units(forecast_dss)  # Fix types/units
-
-    splice_met(currentAlternative, rtw, forecast_dss, forecast_dss)  # Splice met
+    forecast_dss = os.path.join(shared_dir,'WTMP_SacTrn_Forecast.dss')
+    DMS_preprocess.fix_DMS_types_units(forecast_dss)
+    
+    # splice in Redding met data for Lewiston during Jan-Mar
+    splice_met(currentAlternative, rtw, forecast_dss, forecast_dss)
 
     # Compute/write EQ temperature
     currentAlternative.addComputeMessage("Computing equilibrium temperature, this may take a while...")
     eq_temp(rtw,
-            [forecast_dss, "/MR Sac.-Clear Cr. to Sac R./KRDD/Temp-Air//1Hour/SACTRN_BC_SCRIPT/"],
-            [forecast_dss, "/MR Sac.-Clear Cr. to Sac R./RRAC1/%-Cloud Cover-FRAC//1Hour/SACTRN_BC_SCRIPT/"],
-            [forecast_dss, "/MR Sac.-Clear Cr. to Sac R./KRDD/Speed-Wind//1Hour/SACTRN_BC_SCRIPT/"],
-            [forecast_dss, "/MR SAC.-CLEAR CR. TO SAC R./RRAC1/IRRAD-SOLAR//1HOUR/SACTRN_BC_SCRIPT/"],
-            [forecast_dss, "/MR Sac.-Clear Cr. to Sac R./KRDD/Temp-DewPoint//1Hour/SACTRN_BC_SCRIPT/"],
-            [forecast_dss, "/MR Sac.-Clear Cr. to Sac R./KRDD/Temp-Equil//1Hour/sactrn_bc_script/"]
-           )  
+            [forecast_dss,"/MR Sac.-Clear Cr. to Sac R./KRDD/Temp-Air//1Hour/SACTRN_BC_SCRIPT/"],
+            [forecast_dss,"/MR Sac.-Clear Cr. to Sac R./RRAC1/%-Cloud Cover-FRAC//1Hour/SACTRN_BC_SCRIPT/"],
+            [forecast_dss,"/MR Sac.-Clear Cr. to Sac R./KRDD/Speed-Wind//1Hour/SACTRN_BC_SCRIPT/"],
+            [forecast_dss,"/MR SAC.-CLEAR CR. TO SAC R./RRAC1/IRRAD-SOLAR//1HOUR/SACTRN_BC_SCRIPT/"],
+            [forecast_dss,"/MR Sac.-Clear Cr. to Sac R./KRDD/Temp-DewPoint//1Hour/SACTRN_BC_SCRIPT/"],
+            [forecast_dss,"/MR Sac.-Clear Cr. to Sac R./KRDD/Temp-Equil//1Hour/sactrn_bc_script/"]
+           )
 
-    # Write the elevation
+    # forecast reservoir elevations for Shasta, Trinity, and Whiskeytown
     write_forecast_elevations(currentAlternative, rtw, forecast_dss, shared_dir)
 
-    # Create the constant DSS records as placeholders
-    DSS_Tools.create_constant_dss_rec(currentAlternative, rtw, forecast_dss, constant=0.001, what='flow',
-                        dss_type='PER-AVER', period='1DAY', cpart='TinyFlow', fpart='TinyFlow')  # Tiny daily flow
-    DSS_Tools.create_constant_dss_rec(currentAlternative, rtw, forecast_dss, constant=0.001, what='flow',
-                        dss_type='PER-AVER', period='1HOUR', cpart='TinyFlow', fpart='TinyFlow')  # Tiny hourly flow
-    DSS_Tools.create_constant_dss_rec(currentAlternative, rtw, forecast_dss, constant=10.0, what='temp-water',
-                        dss_type='PER-AVER', period='1DAY', cpart='TENS', fpart='TENS')  # Daily 10°C temp
-    DSS_Tools.create_constant_dss_rec(currentAlternative, rtw, forecast_dss, constant=0.0, what='flow',
-                        dss_type='PER-AVER', period='1DAY', cpart='ZEROS', fpart='ZEROS')  # Daily zero flow
-    DSS_Tools.create_constant_dss_rec(currentAlternative, rtw, forecast_dss, constant=0.0, what='flow',
-                        dss_type='PER-AVER', period='1HOUR', cpart='ZEROS', fpart='ZEROS')  # Hourly zero flow
-    DSS_Tools.create_constant_dss_rec(currentAlternative, rtw, forecast_dss, constant=13.0, what='temp-water',
-                        dss_type='PER-AVER', period='1DAY', cpart='WHI-target-13', fpart='WHI-target-13')  # WHI 13°C target
+    # Create a set of fixed constant-value reference records 
+    DSS_Tools.create_constant_dss_rec(currentAlternative, rtw, forecast_dss, constant=0.001, what='flow', 
+                        dss_type='PER-AVER', period='1DAY',cpart='TinyFlow',fpart='TinyFlow')
+    DSS_Tools.create_constant_dss_rec(currentAlternative, rtw, forecast_dss, constant=0.001, what='flow', 
+                        dss_type='PER-AVER', period='1HOUR',cpart='TinyFlow',fpart='TinyFlow')
+    DSS_Tools.create_constant_dss_rec(currentAlternative, rtw, forecast_dss, constant=10.0, what='temp-water', 
+                        dss_type='PER-AVER', period='1DAY',cpart='TENS',fpart='TENS')
+    DSS_Tools.create_constant_dss_rec(currentAlternative, rtw, forecast_dss, constant=0.0, what='flow', 
+                        dss_type='PER-AVER', period='1DAY',cpart='ZEROS',fpart='ZEROS')
+    DSS_Tools.create_constant_dss_rec(currentAlternative, rtw, forecast_dss, constant=0.0, what='flow', 
+                        dss_type='PER-AVER', period='1HOUR',cpart='ZEROS',fpart='ZEROS')
+    DSS_Tools.create_constant_dss_rec(currentAlternative, rtw, forecast_dss, constant=13.0, what='temp-water', 
+                        dss_type='PER-AVER', period='1DAY',cpart='WHI-target-13',fpart='WHI-target-13')
 
     # Keswick need daily record.
     DSS_Tools.resample_dss_ts(forecast_dss, '//SHASTA/FLOW-RELEASE-KESWICK-CFS//1Hour/SACTRN_BC_SCRIPT/', rtw, forecast_dss, '1DAY', pad_start_days=1)  # Hour→Day
@@ -1259,15 +1323,13 @@ def forecast_data_preprocess_W2_5Res(currentAlternative, computeOptions):
     # read location from DSS
     location = get_downstream_loc(forecast_dss)  # Read downstream control location
 
-    # Define the locations for the records
-    TT_rec = "/USBR/SHASTA/TEMP-WATER-TARGET//1Day/SACTRN_BC_SCRIPT/"  # Downstream TT record
-    TT_W2_rec = "/USBR/SHASTA/TEMP-WATER-TARGET-W2-UPSTREAM//1Day/SACTRN_BC_SCRIPT/"  # Upstream TT out path
-    
-    # Create the target timeseries
-    if location == 0:
-        # At Shasta Dam, use exact TT without modification
-        DSS_Tools.copy_dss_ts(TT_rec, new_dss_rec=TT_W2_rec, dss_file_path=forecast_dss, checkMakeCelsius=True)
-    
+    TT_rec = "/USBR/SHASTA/TEMP-WATER-TARGET//1Day/SACTRN_BC_SCRIPT/"
+    TT_W2_rec = "/USBR/SHASTA/TEMP-WATER-TARGET-W2-UPSTREAM//1Day/SACTRN_BC_SCRIPT/"
+    # if the control point is at Shasta Dam itself, no back-routing is needed - copy directly
+    if location == 0: 
+        # @ Shasta Dam, use exact TT
+        DSS_Tools.copy_dss_ts(TT_rec,new_dss_rec=TT_W2_rec,dss_file_path=forecast_dss,checkMakeCelsius=True)
+    # otherwise, back-calculate the upstream (Shasta) target temperature needed to meet the downstream target
     else:
         # At any location other than Shasta. Apply the regression to move the location
         upstream_target(forecast_dss, rtw,

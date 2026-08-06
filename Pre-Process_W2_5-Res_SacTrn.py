@@ -24,7 +24,9 @@ search_list = ["SacTrn", "Sacramento", "American", "Stanislaus"]
 
 # initialize and search for unwanted paths
 matching_paths = []
+# loop through every entry currently on sys.path
 for p in sys.path:
+    # if this path contains any of the unwanted phrases, mark it for removal
     if any(phrase in p for phrase in search_list):
         matching_paths.append(p)
 
@@ -34,6 +36,7 @@ for path in matching_paths:
     print(path)
 
 # remove matching paths from sys.path
+# loop through the matched paths again and remove them from sys.path
 for path in matching_paths:
     if path in sys.path:
         sys.path.remove(path)
@@ -53,12 +56,43 @@ reload(Acc_Dep_ResSim_SacTrn)
 W2_models_for_input_copy = ['W2 Trinity Prescribed','W2 Lewiston Prescribed','W2 Keswick Prescribed']
 
 def study_dir_from_run_dir(run_dir):
+    """
+    Derive the top-level study directory from a W2 run directory.
+
+    Walks up three directory levels from the given run directory
+    (run directory -> W2 simulation folder -> runs folder -> study
+    folder) to find the root study directory.
+
+    Args:
+        run_dir: Path to the W2 run directory for the current alternative.
+
+    Returns:
+        str: The path to the top-level study directory.
+    """
     w2sim,_ = os.path.split(run_dir)
     runs_dir,_ = os.path.split(w2sim)
     study_dir,_ = os.path.split(runs_dir)
     return study_dir
 
 def annual_config_dirs_from_run_dir(run_dir,model_name,startyear_str):
+    """
+    Build the model, annual config, and base directory paths for a
+    given W2 model and start year.
+
+    Uses the study directory (derived from run_dir) along with the
+    model name and start year to construct the paths to: the W2 model's
+    working directory, the annual configuration directory for the given
+    start year, and the base directory used to store the original,
+    unmodified model input files.
+
+    Args:
+        run_dir: Path to the W2 run directory for the current alternative.
+        model_name: Name of the W2 model, e.g. 'W2 Trinity Prescribed'.
+        startyear_str: The forecast start year as a string, e.g. '2016'.
+
+    Returns:
+        tuple: A 3-tuple of (model_dir, annual_config_dir, base_dir) paths.
+    """
     study_dir = study_dir_from_run_dir(run_dir)
     model_dir = os.path.join(study_dir,'cequal-w2',model_name,model_name)  # don't know why this is two model_names deep!!
     annual_config_dir = os.path.join(study_dir,'shared','W2_annual_configs',model_name,startyear_str)
@@ -66,6 +100,30 @@ def annual_config_dirs_from_run_dir(run_dir,model_name,startyear_str):
     return model_dir,annual_config_dir,base_dir
 
 def computeAlternative(currentAlternative, computeOptions):
+    """
+    Compute the W2 5-Reservoir Sacramento Trinity pre-processing alternative.
+
+    This function runs the forecast data pre-processing step for the W2
+    5-reservoir model (via Forecast_preprocess.forecast_data_preprocess_W2_5Res)
+    and reports success only if that pre-processing step completes
+    successfully.
+
+    Note: a block of logic for copying annual W2 model configuration
+    files (based on W2_models_for_input_copy and startyear_str) is
+    currently commented out below, as is the accumulated deposition
+    computation step (Acc_Dep_ResSim_SacTrn.computeAlternative).
+
+    Args:
+        currentAlternative: The ScriptingAlternative being computed.
+            Type: hec2.wat.plugin.java.impl.scripting.model.ScriptPluginAlt
+        computeOptions: The compute options for this run.
+            Type: hec.wat.model.ComputeOptions
+
+    Returns:
+        bool: True if the forecast data pre-processing step succeeded.
+            If it fails, no explicit value is returned (implicit None),
+            which HEC-WAT will typically treat as a failed alternative.
+    """
     currentAlternative.addComputeMessage("Computing ScriptingAlternative:" + currentAlternative.getName())
     currentAlternative.addComputeMessage('\n')
 

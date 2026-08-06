@@ -1,90 +1,49 @@
-"""
-DSS Value Replacement Utilities (WTMP / HEC-WAT)
-================================================
+from hec.heclib.dss import HecDss
+from hec.heclib.util.Heclib import UNDEFINED_DOUBLE
+from hec.io import TimeSeriesContainer
+from rma.util.RMAConst import MISSING_DOUBLE
 
-Purpose
--------
-Provide helper functions to modify/write time series in a DSS file for the
-Sacramento–Trinity WTMP workflow:
-
-1. ``replaceValuesOverThresh``  
-   For a given primary series, when a value is **over** a threshold, replace
-   the corresponding value in an existing (tertiary) series with the value
-   from a secondary series. When a value is **under** the threshold, retain
-   the existing (tertiary) value.
-
-2. ``replaceNaNValues``  
-   Replace undefined/missing values (``UNDEFINED_DOUBLE`` sentinel) in an
-   existing series using values from a fill series at matching timestamps.
-
-Notes
------
-- **Environment:** Jython within HEC‑WAT; uses HEC‑DSS APIs and containers.
-- **Unit handling:** ``replaceValuesOverThresh`` converts primary series
-  from CMS → CFS if units are reported as ``'cms'``.
-- **Time matching:** Replacement operations require that timestamps in the
-  target series exist in the donor series; otherwise a message is printed
-  and the value is not replaced.
-- **Write behavior:** Results are written back to the DSS file using the
-  original path of the modified (existing/tertiary or existing) series.
-
-See Also
---------
-hec.heclib.dss.HecDss
-    API to open, read, and write DSS time series.
-hec.io.TimeSeriesContainer
-    Container used to write updated time series back to DSS.
-"""
-
-from hec.heclib.dss import HecDss            # HEC-DSS API: open/read/write operations on .dss files
-from hec.heclib.util.Heclib import UNDEFINED_DOUBLE  # HEC utility sentinel for undefined/missing values
-from hec.io import TimeSeriesContainer        # HEC I/O container used to assemble time series for writing
-from rma.util.RMAConst import MISSING_DOUBLE  # RMA constant for missing values (imported for consistency; not used here)
-
-
-def replaceValuesOverThresh(currentAlt, dssFile, timewindow,
-                            primary_data_dsspath, secondary_data_dsspath,
-                            tertiary_data_dsspath, threshold):
+def replaceValuesOverThresh(currentAlt, dssFile, timewindow, primary_data_dsspath, secondary_data_dsspath, tertiary_data_dsspath, threshold):
     """
-    Replace values in an existing (tertiary) series when the primary series exceeds a threshold.
+    When Primary file under threshold, use established data values from tertiary_data_dsspath record
+    when over threshold, use values from secondary data dsspath
 
-    When the primary value at a timestamp is **over** the threshold, the
-    corresponding value in the tertiary (existing) series is replaced with
-    the value from the secondary series. When the primary value is **under**
-    the threshold, the tertiary value remains unchanged.
+    For each timestep where the primary record's value exceeds the
+    given threshold, the value in the tertiary ("existing") record
+    at that same timestamp is overwritten with the corresponding
+    value from the secondary record. Timesteps where the primary
+    value stays at or below the threshold are left untouched in the
+    tertiary record. The (possibly modified) tertiary record is
+    then written back to the same DSS path.
+    Args:
+        currentAlt: The alternative object being computed. Must
+            support addComputeMessage() for logging.
+        dssFile (str): Path to the DSS file to read all three
+            records from and write the result to.
+        timewindow: The run time window object, used to get the
+            start and end time strings for reading input data.
+        primary_data_dsspath (str): DSS path of the record whose
+            values are compared against threshold. Converted from
+            cms to cfs if necessary.
+        secondary_data_dsspath (str): DSS path of the record to
+            pull replacement values from, at timesteps where the
+            primary value exceeds threshold.
+        tertiary_data_dsspath (str): DSS path of the "existing"
+            record that gets selectively overwritten and then
+            rewritten back to this same path.
+        threshold (float): The threshold value (in the primary
+            record's units, after cfs conversion if applicable)
+            above which replacement occurs.
 
-    Parameters
-    ----------
-    currentAlt : object
-        WAT scripting alternative used for logging (e.g., ``addComputeMessage``).
-    dssFile : str
-        Path to the DSS file containing all referenced time series.
-    timewindow : object
-        Runtime window object providing start/end times and HEC time conversions.
-    primary_data_dsspath : str
-        Full DSS pathname for the primary series (driver for threshold logic).
-    secondary_data_dsspath : str
-        Full DSS pathname for the secondary (donor) series used when threshold is exceeded.
-    tertiary_data_dsspath : str
-        Full DSS pathname for the existing (target) series to be modified and re-written.
-    threshold : float
-        Numeric threshold; replacement occurs when ``primary_val > threshold``.
-
-    Returns
-    -------
-    int
-        ``0`` on completion 
-
-    Notes
-    -----
-    - If the primary units are ``cms``, values are converted to ``cfs`` using
-      factor ``35.314666213`` before threshold comparison.
-    - Replacement is performed only when the timestamp exists in **both**
-      the tertiary and secondary series; otherwise an informational message
-      is printed and the value at that timestamp is left unchanged.
+    Returns:
+        int: Always returns 0 on completion. Writes the modified
+            tertiary record back to tertiary_data_dsspath in
+            dssFile. If a matching timestamp cannot be found in
+            either the tertiary or secondary record for a given
+            primary timestep over threshold, a message is printed
+            (but no error is raised) and that timestep is left
+            unmodified.
     """
-    
-    # Extract start/end strings from the runtime window for DSS read operations
     starttime_str = timewindow.getStartTimeString()
     endtime_str = timewindow.getEndTimeString()
 
@@ -94,7 +53,7 @@ def replaceValuesOverThresh(currentAlt, dssFile, timewindow,
     # Open the target DSS file containing all series needed for this operation
     dssFm = HecDss.open(dssFile)
     
-    # ---- Read the primary series that drives the threshold logic -------------------------
+    # --- Read the primary record and convert units if necessary ---
     PrimaryTS = dssFm.read(primary_data_dsspath, starttime_str, endtime_str, False)
     PrimaryTS = PrimaryTS.getData()  # Extract the internal data container
 
@@ -102,15 +61,14 @@ def replaceValuesOverThresh(currentAlt, dssFile, timewindow,
     Primary_units = PrimaryTS.units
     PrimaryTS_values = PrimaryTS.values
     PrimaryTS_times = PrimaryTS.times
-
-    # If the primary series is reported in 'cms', convert to 'cfs' for consistent comparison
+    # if the primary series is in cms, convert it to cfs before comparing against threshold
     if Primary_units.lower() == 'cms':
         currentAlt.addComputeMessage('Converting cms to cfs')
         PrimaryTS_values = []  # Rebuild values with unit conversion applied
         for val in PrimaryTS.values:
             PrimaryTS_values.append(val * 35.314666213)  # CMS → CFS
 
-    # ---- Read the secondary (donor) series used when threshold is exceeded ---------------
+    # --- Read the secondary (replacement source) and tertiary (existing/target) records ---
     SecondaryTS = dssFm.read(secondary_data_dsspath, starttime_str, endtime_str, False)
     SecondaryTS = SecondaryTS.getData()
     SecondaryTS_values = SecondaryTS.values
@@ -124,25 +82,26 @@ def replaceValuesOverThresh(currentAlt, dssFile, timewindow,
     ExistingTS_units = ExistingTS.units
     ExistingTS_type = ExistingTS.type
 
-    # ---- Iterate over primary values, performing replacements when threshold is exceeded -
+    # --- Replace values in the existing record wherever the primary exceeds the threshold ---
+    # for each primary value, if it exceeds the threshold, substitute the secondary
+    # record's value into the existing record at the matching timestamp
     for i, primary_val in enumerate(PrimaryTS_values):
-        if primary_val &gt; threshold:  # Use HTML entity as provided; replacement triggers when primary exceeds threshold
-            primarytime = PrimaryTS_times[i]  # Timestamp at the current index
-
-            # Only replace if the timestamp exists in both the tertiary and secondary series
+        if primary_val > threshold:
+            primarytime = PrimaryTS_times[i]
+            # only substitute if the same timestamp exists in both the existing and secondary records
             if primarytime in ExistingTS_times and primarytime in SecondaryTS_times:
                 existing_time_index = ExistingTS_times.index(primarytime)   # Find index in existing series
                 secondary_time_index = SecondaryTS_times.index(primarytime) # Find index in secondary series
                 ExistingTS_values[existing_time_index] = SecondaryTS_values[secondary_time_index]  # Perform replacement
             
             else:
-                # Print diagnostics if either timestamp is missing; values remain unchanged at this time
+                # report which record(s) are missing this timestamp, and leave the value unmodified
                 if primarytime not in ExistingTS_times:
                     print('Unable to find time {0} in {1}'.format(primarytime, tertiary_data_dsspath))
                 if primarytime not in SecondaryTS_times:
                     print('Unable to find time {0} in {1}'.format(primarytime, secondary_data_dsspath))
 
-    # ---- Assemble a TimeSeriesContainer and write the modified tertiary series back ------
+    # --- Write the modified existing record back to DSS ---
     tsc = TimeSeriesContainer()
     tsc.times = ExistingTS_times            # Use the original time vector
     tsc.fullName = tertiary_data_dsspath    # Write back to the tertiary (existing) DSS path
@@ -170,37 +129,40 @@ def replaceValuesOverThresh(currentAlt, dssFile, timewindow,
 
 def replaceNaNValues(currentAlt, dssFile, timewindow, existing_dsspath, fill_dsspath):
     """
-    Replace undefined values in an existing series using a fill series at matching timestamps.
+    Fill in undefined (missing) values in an existing time series
+    record using matching timestamps from a separate fill record,
+    and write the result back to the same DSS path.
 
-    This function scans the existing series for values equal to the
-    ``UNDEFINED_DOUBLE`` sentinel and replaces those values with the
-    corresponding values from a fill series (when the timestamp is present).
+    NOTE: The error-message branch below references the variables
+    `primarytime` and `tertiary_data_dsspath`, neither of which
+    exist in this function (they belong to the similarly-structured
+    replaceValuesOverThresh function above). As written, this branch
+    will raise a NameError if it is ever reached (i.e. if a missing
+    value's timestamp cannot be found in the fill record). This
+    appears to be leftover from copying that function's logic and
+    has been left unchanged here for visibility.
 
-    Parameters
-    ----------
-    currentAlt : object
-        WAT scripting alternative used for logging.
-    dssFile : str
-        Path to the DSS file containing both existing and fill series.
-    timewindow : object
-        Runtime window object providing start/end time strings and HEC times.
-    existing_dsspath : str
-        Full DSS pathname for the existing series to be checked/updated.
-    fill_dsspath : str
-        Full DSS pathname for the fill series providing replacement values.
+    Args:
+        currentAlt: The alternative object being computed. Must
+            support addComputeMessage() for logging.
+        dssFile (str): Path to the DSS file to read both records
+            from and write the result to.
+        timewindow: The run time window object, used to get the
+            start and end time strings for reading input data.
+        existing_dsspath (str): DSS path of the record to fill
+            missing values in, and to write the result back to.
+        fill_dsspath (str): DSS path of the record to pull
+            replacement values from, at timestamps where the
+            existing record has an undefined value.
 
-    Returns
-    -------
-    int
-        ``0`` on completion.
+    Returns:
+        int: Always returns 0 on completion. Writes the filled
+            record back to existing_dsspath in dssFile.
 
-    Notes
-    -----
-    - Replacement occurs only when the timestamp exists in the fill series.
-    - A message is printed if a matching timestamp is not found in the fill series.
+    Raises:
+        NameError: If a missing value's timestamp cannot be found
+            in the fill record (see NOTE above).
     """
-    
-    # Retrieve human-readable start/end strings for DSS queries and log the window
     starttime_str = timewindow.getStartTimeString()
     endtime_str = timewindow.getEndTimeString()
     currentAlt.addComputeMessage('Looking from {0} to {1}'.format(starttime_str, endtime_str))
@@ -208,7 +170,7 @@ def replaceNaNValues(currentAlt, dssFile, timewindow, existing_dsspath, fill_dss
     # Open the DSS file holding both target and fill series
     dssFm = HecDss.open(dssFile)
 
-    # ---- Read the existing series to be cleaned -----------------------------------------
+    # --- Read the existing record to be filled ---
     ExistingTS = dssFm.read(existing_dsspath, starttime_str, endtime_str, False)
     ExistingTS = ExistingTS.getData()      # Extract container
     ExistingTS_values = ExistingTS.values  # Values to scan for UNDEFINED_DOUBLE
@@ -216,14 +178,16 @@ def replaceNaNValues(currentAlt, dssFile, timewindow, existing_dsspath, fill_dss
     ExistingTS_units = ExistingTS.units    # Preserve units on write
     ExistingTS_type = ExistingTS.type      # Preserve type on write
 
-    # ---- Read the fill series providing replacement values ------------------------------
+    # --- Read the fill record to pull replacement values from ---
     FillTS = dssFm.read(fill_dsspath, starttime_str, endtime_str, False)
     FillTS = FillTS.getData()             # Extract container
     FillTS_values = FillTS.values         # Donor values
     FillTS_times = FillTS.times           # Donor time vector
     FillTS_units = FillTS.units           # Units (typically same domain; not used directly)
 
-    # ---- Iterate and replace undefined values when a matching timestamp exists ----------
+    # --- Fill any undefined values using the matching timestamp in the fill record ---
+    # for each value in the existing record, if it is undefined, look up the
+    # matching timestamp in the fill record and substitute that value in
     for i, value in enumerate(ExistingTS_values):
         if value == UNDEFINED_DOUBLE:  # Check for sentinel indicating undefined/missing
             existingtime = ExistingTS_times[i]  # Timestamp corresponding to the missing value
@@ -239,7 +203,7 @@ def replaceNaNValues(currentAlt, dssFile, timewindow, existing_dsspath, fill_dss
                 # (e.g., primarytime, tertiary_data_dsspath). Left unchanged intentionally.
                 print('Unable to find time {0} in {1}'.format(primarytime, tertiary_data_dsspath))
                 
-    # ---- Assemble container and write the updated existing series back to DSS -----------
+    # --- Write the filled record back to DSS ---
     tsc = TimeSeriesContainer()
     tsc.times = ExistingTS_times             # Original time vector
     tsc.fullName = existing_dsspath          # Write back to the existing series path
