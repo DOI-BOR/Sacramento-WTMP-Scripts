@@ -179,18 +179,6 @@ def newton_raphson_solve(f, df, x0, H1, uw, Ta_in, Td, sat_vp_ta, tol=1e-2, max_
         risking numerical instability), or if the number of
         iterations exceeds `max_iter` without converging.
 
-    Notes
-    -----
-    **Known issue:** The Newton-Raphson update step itself (computing
-    a new candidate `x_new` from `x_old`, `fx_old`, and `dfx_old`) is
-    missing from the loop body in the original source; `x_new` is
-    referenced (in the convergence check and in `x_old = x_new`)
-    without ever being assigned. As written, this function will raise
-    a `NameError` on the first iteration. This has been left unchanged
-    per instructions, but is flagged here for visibility. (Calling
-    code in this module wraps calls to this function in `try/except`
-    and falls back to `bisection_solve`, which would silently mask
-    this bug at runtime.)
     """
     iter_count = 0
     x_old = x0
@@ -712,7 +700,7 @@ def calc_equilibrium_temp(dtt, at, cl, sr, td, ws):
         te_bs = equilibrium_temp(dtt[j], at[j], cl[j], sr[j], ws[j], td[j], x0, type='bs')
         # try the faster Newton-Raphson solver first; fall back to bisection if it raises an error
         try:
-            te[j] = equilibrium_temp(dtt[j], at[j], cl[j], sr[j], ws[j], td[j], x0, type='nr')  # Newton–Raphson
+            te[j] = equilibrium_temp(dtt[j], at[j], cl[j], sr[j], ws[j], td[j], x0, type='nr')  # Newton-Raphson
         except:
             # print(j, ' Newton-Raphson failure (convergence).  Using bisection-solution equilibrium temp')
             te[j] = te_bs  # fallback to bisection

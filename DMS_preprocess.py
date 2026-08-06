@@ -12,7 +12,7 @@ Utilities and workflow steps to:
 
 Notes
 -----
-- **Environment:** Jython in HEC‑WAT (Python 2.7 semantics), using HEC-DSS APIs.
+- **Environment:** Jython in HECWAT (Python 2.7 semantics), using HECDSS APIs.
 - **I/O:** DSS paths may be specified as `file::/A/B/C/D/E/F/` to target
   a specific file; otherwise the primary file handle is used.
 - **Units:** Flow CMS to CFS factor `35.314666213`; wind conversions (kph to m/s);
@@ -176,7 +176,7 @@ def fix_DMS_types_units(dss_file):
                     # convert to m/s 
                     tsc.units = 'm/s'                         # Target unit for wind speed
                     for i in range(len(tsc.values)) :
-                        tsc.values[i] = tsc.values[i] / 3.6   # kph → m/s
+                        tsc.values[i] = tsc.values[i] / 3.6   # kph to m/s
                     #tsc.setStoreAsDoubles(True)
                     dss.put(tsc)
 
@@ -410,7 +410,7 @@ def splice_lewiston_met_data(currentAlternative, rtw, met_dss_file, output_dss_f
     output_dss_file : str
         Destination DSS file for spliced outputs.
     months : list of int, optional
-        Month numbers to splice (default `[1, 2, 3]` to Jan–Mar).
+        Month numbers to splice (default `[1, 2, 3]` to Jan-Mar).
 
     Returns
     -------
@@ -532,7 +532,7 @@ def compute_5Res_outflows(currentAlternative, rtw, hydro_dss, output_dss_file):
     """
     
 
-    # Trinity: add Generation, G1 &amp; G2, which are powerplant and jet-valve (bypass) flows from the powerplant intake (G3 is the low-level bypass)
+    # Trinity: add Generation, G1 and G2, which are powerplant and jet-valve (bypass) flows from the powerplant intake (G3 is the low-level bypass)
     inflow_records = ['/MR Sac.-Trinity Lake/TRN-Generation Release/Flow//1Hour/231.5.125.2.1/',
                       '/MR Sac.-Trinity Lake/TRN-Outlet Release G1/Flow//1Hour/231.5.125.7.1/',
                       '/MR Sac.-Trinity Lake/TRN-Outlet Release G2/Flow//1Hour/231.5.125.8.1/']
