@@ -35,6 +35,7 @@ for path in matching_paths:
 
 # remove matching paths from sys.path
 for path in matching_paths:
+    # if the path is still present in sys.path, remove it
     if path in sys.path:
         sys.path.remove(path)
 
@@ -53,6 +54,32 @@ reload(DMS_preprocess)
 
 
 def computeAlternative(currentAlternative, computeOptions):
+    """
+    Compute a scripting alternative by running preprocessing and
+    accretion/depletion calculations for the ResSim Sacramento
+    Trinity (SacTrn) model.
+
+    This function logs a compute message to the alternative, then
+    runs two dependent steps in sequence:
+      1. Preprocessing of the 5-reservoir ResSim data via
+         DMS_preprocess.preprocess_ResSim_5Res.
+      2. Accretion/depletion computation via
+         Acc_Dep_ResSim_SacTrn.computeAlternative.
+
+    Args:
+        currentAlternative: The alternative object being computed.
+            Must support addComputeMessage() for logging status
+            messages during the compute process.
+        computeOptions: The compute options/settings object passed
+            through to the preprocessing and accretion/depletion
+            steps.
+
+    Returns:
+        bool: True if both the preprocessing step and the
+            accretion/depletion step complete successfully.
+            Returns None (implicitly) if either step fails, since
+            no explicit False/None branch is defined.
+    """
     currentAlternative.addComputeMessage("Computing ScriptingAlternative:" + currentAlternative.getName())
     currentAlternative.addComputeMessage('\n')
 

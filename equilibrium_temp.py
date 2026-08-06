@@ -6,20 +6,58 @@ reload(tz_offset)
 
 # TODO: hardcoded lat/lon sould be variable
 
-zero_K = 273.15
+
+# Physical and empirical constants used throughout the equilibrium temperature model 
+zero_K = 273.15               # Celsius-to-Kelvin offset
 Tk = zero_K
-stefan_boltz_const = 5.67e-8
-lw_emissivity_water = 0.97
-reference_density = 1000.
-wind_a = 2.8e-9
-wind_b = 1.2e-9
-Magnus_a = 6.1078
-Magnus_b = 17.27
-Magnus_c = 237.7
-Cb = 0.61
+stefan_boltz_const = 5.67e-8  # Stefan-Boltzmann constant, W/(m^2*K^4)
+lw_emissivity_water = 0.97    # longwave emissivity of a water surface
+reference_density = 1000.     # reference water density, kg/m^3
+wind_a = 2.8e-9                # wind function coefficient (base evaporation term)
+wind_b = 1.2e-9                # wind function coefficient (wind-speed-dependent term)
+Magnus_a = 6.1078             # Magnus-Tetens formula coefficient
+Magnus_b = 17.27              # Magnus-Tetens formula coefficient
+Magnus_c = 237.7              # Magnus-Tetens formula coefficient
+Cb = 0.61                     # Bowen's coefficient (sensible heat transfer)
+
+
 
 def bisection_solve(fTe_min, a, b, H1, uw, Ta_in, td, sat_vp_ta, tol=1e-2, max_iter=1000):
-    
+    """
+    Find a root of fTe_min using the bisection method, searching
+    within the interval [a, b].
+
+    This provides a slower but more robust fallback solver for the
+    equilibrium temperature equation, used when the faster
+    Newton-Raphson method fails to converge or produces an
+    unreliable result.
+
+    Args:
+        fTe_min: The function whose root is being sought (typically
+            fTe_min from this module). Must accept
+            (Te, H1, uw, Ta_in, td, sat_vp_ta) and return a float.
+        a (float): Lower bound of the search interval.
+        b (float): Upper bound of the search interval.
+        H1 (float): Net incoming shortwave plus longwave heat flux,
+            passed through to fTe_min.
+        uw (float): Wind speed, passed through to fTe_min.
+        Ta_in (float): Air temperature, passed through to fTe_min.
+        td (float): Dew point temperature, passed through to
+            fTe_min.
+        sat_vp_ta (float): Saturation vapor pressure at air
+            temperature, passed through to fTe_min.
+        tol (float, optional): Convergence tolerance on the half
+            interval width. Defaults to 1e-2.
+        max_iter (int, optional): Maximum number of iterations
+            before raising an error. Defaults to 1000.
+
+    Returns:
+        float: The estimated root (equilibrium temperature).
+
+    Raises:
+        ValueError: If the number of iterations exceeds max_iter
+            without converging.
+    """
     fa = fTe_min(a, H1, uw, Ta_in, td, sat_vp_ta)
     fb = fTe_min(b, H1, uw, Ta_in, td, sat_vp_ta)
 
@@ -27,6 +65,7 @@ def bisection_solve(fTe_min, a, b, H1, uw, Ta_in, td, sat_vp_ta, tol=1e-2, max_i
     #    raise ValueError("Bisection method requires signs of f(a) and f(b) to be opposite")
 
     iter_count = 0
+    # repeatedly halve the search interval until it is smaller than the tolerance
     while (b - a) / 2.0 > tol:
         c = (a + b) / 2.0
         # protect against divide-by-zero during iteration
@@ -34,13 +73,16 @@ def bisection_solve(fTe_min, a, b, H1, uw, Ta_in, td, sat_vp_ta, tol=1e-2, max_i
             c += tol
         fc = fTe_min(c, H1, uw, Ta_in, td, sat_vp_ta)
 
+        # if the midpoint is (close enough to) a root, return it immediately
         if fc == 0 or (b - a) / 2.0 < tol:
             return c  # Root found
         #print('BC:',a,b,c)
         iter_count += 1
+        # if too many iterations have passed without converging, give up
         if iter_count > max_iter:
             raise ValueError("bisection_solve: Maximum iterations exceeded")
 
+        # narrow the interval to whichever half still brackets the root
         if fa * fc < 0.0:
             b = c
             fb = fc
@@ -52,18 +94,58 @@ def bisection_solve(fTe_min, a, b, H1, uw, Ta_in, td, sat_vp_ta, tol=1e-2, max_i
 
 
 def newton_raphson_solve(f, df, x0, H1, uw, Ta_in, Td, sat_vp_ta, tol=1e-2, max_iter=1000):
+    """
+    Find a root of f using the Newton-Raphson method, given the
+    function and its derivative, starting from an initial guess x0.
+
+    This is the primary (fast) solver for equilibrium temperature.
+    It typically converges quickly but can fail for some
+    combinations of inputs, in which case bisection_solve is used
+    as a fallback (see equilibrium_temp / calc_equilibrium_temp).
+
+    Args:
+        f: The function whose root is being sought (typically fTe
+            from this module). Must accept
+            (Te, H1, uw, Ta_in, Td, sat_vp_ta) and return a float.
+        df: The derivative of f with respect to Te (typically
+            dfTe_dTe). Must accept the same arguments as f.
+        x0 (float): Initial guess for the root.
+        H1 (float): Net incoming shortwave plus longwave heat flux,
+            passed through to f and df.
+        uw (float): Wind speed, passed through to f and df.
+        Ta_in (float): Air temperature, passed through to f and df.
+        Td (float): Dew point temperature, passed through to f and
+            df.
+        sat_vp_ta (float): Saturation vapor pressure at air
+            temperature, passed through to f and df.
+        tol (float, optional): Convergence tolerance on the change
+            between iterations. Defaults to 1e-2.
+        max_iter (int, optional): Maximum number of iterations
+            before raising an error. Defaults to 1000.
+
+    Returns:
+        float: The estimated root (equilibrium temperature).
+
+    Raises:
+        ValueError: If the derivative becomes too small (near-zero
+            slope, risking numerical instability), or if the number
+            of iterations exceeds max_iter without converging.
+    """
     iter_count = 0
     x_old = x0
+    # iterate the Newton-Raphson update until convergence or max_iter is reached
     while iter_count < max_iter:
         fx_old = f(x_old, H1, uw, Ta_in, Td, sat_vp_ta)
         dfx_old = df(x_old, H1, uw, Ta_in, Td, sat_vp_ta)
 
+        # a near-zero derivative would make the update step unstable/undefined
         if abs(dfx_old) < tol:
             raise ValueError("Derivative near zero")
 
         x_new = x_old - fx_old / dfx_old
         #print('NR:',x0,x_new,x_old,fx_old,dfx_old)
 
+        # if the estimate has stopped changing meaningfully, treat it as converged
         if abs(x_new - x_old) < tol:
             return x_new  # Root found
 
@@ -75,6 +157,19 @@ def newton_raphson_solve(f, df, x0, H1, uw, Ta_in, Td, sat_vp_ta, tol=1e-2, max_
 
 
 def get_decimal_day_of_year(tin):
+    """
+    Convert a datetime into a decimal day-of-year value (day 1.0 is
+    midnight on January 1st), adjusted by a configured timezone
+    offset in days.
+
+    Args:
+        tin (datetime.datetime): The date/time to convert.
+
+    Returns:
+        float: The decimal day of year, including a fractional
+            component for the time of day and adjusted by
+            tz_offset.days.
+    """
     foy = dt.datetime(tin.year, 1, 1, 0, 0, 0)
     ddoy = (tin - foy).total_seconds() / 86400. + 1. + tz_offset.days
     #print(tin.strftime('%Y-%m-%d %H:%M'),ddoy)
@@ -82,6 +177,23 @@ def get_decimal_day_of_year(tin):
 
 
 def solar_alt_angle(tin):
+    """
+    Compute the solar altitude angle (degrees above the horizon)
+    for a fixed hardcoded latitude/longitude, at a given date/time.
+
+    NOTE: latitude, longitude, and time_zone_longitude are hardcoded
+    here (see TODO above) rather than being configurable per site.
+
+    Args:
+        tin (datetime.datetime): The date/time to compute the solar
+            altitude angle for.
+
+    Returns:
+        float: The solar altitude angle, in degrees. Negative
+            values indicate the sun is below the horizon.
+    """
+    # hardcoded site location (see TODO above) and the standard meridian
+    # for the local time zone, both in degrees
     latitude = 38.1
     longitude = 121.8
     time_zone_longitude = 120.
@@ -90,20 +202,47 @@ def solar_alt_angle(tin):
     doy = get_decimal_day_of_year(tin)
 
     solar_decl = 0.4092 * math.cos(2. * math.pi / 365. * (172. - doy))
+    # two terms of the standard solar altitude formula, combining
+    # declination and latitude
     t1 = math.sin(solar_decl) * math.sin(latitude * math.pi / 180.)
     t2 = math.cos(solar_decl) * math.cos(latitude * math.pi / 180.)
+    # decimal hour of the day, extracted from the fractional part of doy
     hr = (doy - math.floor(doy)) * 24.
     hr_angle = math.pi * (hr - delta - 12.) / 12.
+    # combine declination and hour angle terms to get the sine of the
+    # solar altitude, then convert to an angle in degrees
     sin_solar_alt = t1 + t2 * math.cos(hr_angle)
     solar_alt_angle = math.asin(sin_solar_alt) * 180. / math.pi
     return solar_alt_angle
 
 
 def sw_water_reflectance(tin, cloud_in):
+    """
+    Estimate the fraction of incoming shortwave (solar) radiation
+    reflected off a water surface, based on solar altitude angle
+    and cloud cover.
+
+    Reflectance is higher at low sun angles and varies with cloud
+    cover using an empirical power-law fit with cloud-cover-
+    dependent coefficients.
+
+    Args:
+        tin (datetime.datetime): The date/time used to compute
+            solar altitude angle.
+        cloud_in (float): Cloud cover fraction, from 0 (clear) to 1
+            (fully overcast).
+
+    Returns:
+        float: The estimated surface reflectance fraction, from 0
+            to 1. Returns 1.0 (fully reflected / no shortwave
+            input) if the sun is at or below the horizon.
+    """
     alt_angle = solar_alt_angle(tin)
+    # if the sun is below the horizon, treat all shortwave radiation as reflected (none absorbed)
     if alt_angle <= 0.:
         return 1.
     else:
+        # select the empirical reflectance coefficients based on the cloud cover band
         if cloud_in > 0.95:
             acoef = 0.33
             bcoef = -0.45
@@ -122,6 +261,18 @@ def sw_water_reflectance(tin, cloud_in):
 
 
 def heat_flux_surface_longwave_down(air_temp_in, cloud_in):
+    """
+    Compute downward atmospheric longwave radiation heat flux onto
+    a water surface, based on air temperature and cloud cover.
+
+    Args:
+        air_temp_in (float): Air temperature, in degrees Celsius.
+        cloud_in (float): Cloud cover fraction, from 0 (clear) to 1
+            (fully overcast).
+
+    Returns:
+        float: Downward longwave heat flux, in W/m^2.
+    """
     sfc_reflect_fract = 0.03
     cloud_cover_fract_coef = 0.17
     con1 = 0.937e-5
@@ -132,15 +283,64 @@ def heat_flux_surface_longwave_down(air_temp_in, cloud_in):
 
 
 def latent_heat_vaporization(temp_in):
+    """
+    Compute the latent heat of vaporization of water at a given
+    temperature.
+
+    Args:
+        temp_in (float): Water temperature, in degrees Celsius.
+
+    Returns:
+        float: Latent heat of vaporization, in J/kg.
+    """
     return 1000. * (2499. - 2.36 * temp_in)
 
 
 def sat_water_vapor_pres(temp_in):
+    """
+    Compute the saturation vapor pressure of water at a given
+    temperature, using the Magnus-Tetens formula.
+
+    Args:
+        temp_in (float): Temperature, in degrees Celsius.
+
+    Returns:
+        float: Saturation vapor pressure, in the same pressure
+            units implied by the Magnus_a/Magnus_b/Magnus_c
+            constants (typically millibars/hPa).
+    """
     # Magnes-Tetens formula
     return Magnus_a * math.exp(Magnus_b * temp_in / (temp_in + Magnus_c))
 
 
 def fTe(Te, H1, uw, Ta_in, Td, sat_vp_ta):
+    """
+    Evaluate the equilibrium temperature heat balance function at a
+    candidate water surface temperature Te.
+
+    This represents the net heat flux balance (incoming shortwave/
+    longwave, outgoing longwave, and evaporative/sensible heat
+    exchange) as a function of the candidate equilibrium
+    temperature. Used as the function being root-solved (with
+    Newton-Raphson or bisection) to find the actual equilibrium
+    temperature where the heat balance is satisfied.
+
+    Args:
+        Te (float): Candidate equilibrium water temperature, in
+            degrees Celsius.
+        H1 (float): Net incoming shortwave plus longwave heat flux,
+            in W/m^2.
+        uw (float): Wind speed.
+        Ta_in (float): Air temperature, in degrees Celsius.
+        Td (float): Dew point temperature, in degrees Celsius.
+        sat_vp_ta (float): Saturation vapor pressure at air
+            temperature.
+
+    Returns:
+        float: The value of the heat balance function at Te. Used
+            by the solvers to search for the value of Te where this
+            equals zero (or, for fTe_min, where Te equals fTe(Te)).
+    """
     '''Calculation of fTe with only Te-dependent terms'''
     Lw = latent_heat_vaporization(Te)
     sat_vp_te = sat_water_vapor_pres(Te)
@@ -150,8 +350,29 @@ def fTe(Te, H1, uw, Ta_in, Td, sat_vp_ta):
 
 
 def dfTe_dTe(Te, H1, uw, Ta_in, Td, sat_vp_ta):
-    '''derivative of fTe, generated by Chat GPT 4'''
+    """
+    Compute the derivative of fTe with respect to Te, for use as
+    the Jacobian in the Newton-Raphson solver.
 
+    NOTE: This derivative was generated with the help of an AI
+    assistant (per the original inline comment) rather than derived
+    by hand; it has not been independently re-verified here.
+
+    Args:
+        Te (float): Candidate equilibrium water temperature, in
+            degrees Celsius.
+        H1 (float): Net incoming shortwave plus longwave heat flux,
+            in W/m^2.
+        uw (float): Wind speed.
+        Ta_in (float): Air temperature, in degrees Celsius.
+        Td (float): Dew point temperature, in degrees Celsius.
+        sat_vp_ta (float): Saturation vapor pressure at air
+            temperature.
+
+    Returns:
+        float: The derivative d(fTe)/d(Te) evaluated at Te.
+    """
+    '''derivative of fTe, generated by Chat GPT 4'''
     Lw = 1000. * (2499. - 2.36 * Te)
     sat_vp_te = Magnus_a * math.exp(Magnus_b * Te / (Te + Magnus_c))
 
@@ -173,13 +394,88 @@ def dfTe_dTe(Te, H1, uw, Ta_in, Td, sat_vp_ta):
 
 
 def fTe_min(Te, H1, uw, Ta_in, Td, sat_vp_ta):
+    """
+    Reformulate the heat balance function fTe as a difference
+    (Te minus fTe(Te)), suitable for root-finding with
+    bisection_solve, where a root corresponds to Te satisfying the
+    heat balance equation.
+
+    Args:
+        Te (float): Candidate equilibrium water temperature, in
+            degrees Celsius.
+        H1 (float): Net incoming shortwave plus longwave heat flux,
+            in W/m^2.
+        uw (float): Wind speed.
+        Ta_in (float): Air temperature, in degrees Celsius.
+        Td (float): Dew point temperature, in degrees Celsius.
+        sat_vp_ta (float): Saturation vapor pressure at air
+            temperature.
+
+    Returns:
+        float: Te minus fTe(Te, ...). A root of this function
+            (value of 0) corresponds to the equilibrium temperature.
+    """
     return Te - fTe(Te, H1, uw, Ta_in, Td, sat_vp_ta)
 
 def fTe_abs(Te, H1, uw, Ta_in, Td, sat_vp_ta):
+    """
+    Compute the absolute value of the heat balance function fTe at
+    a candidate temperature Te, suitable for use as an objective
+    function with a general-purpose minimizer (e.g.
+    scipy.optimize.minimize).
+
+    Args:
+        Te (float): Candidate equilibrium water temperature, in
+            degrees Celsius.
+        H1 (float): Net incoming shortwave plus longwave heat flux,
+            in W/m^2.
+        uw (float): Wind speed.
+        Ta_in (float): Air temperature, in degrees Celsius.
+        Td (float): Dew point temperature, in degrees Celsius.
+        sat_vp_ta (float): Saturation vapor pressure at air
+            temperature.
+
+    Returns:
+        float: The absolute value of fTe(Te, ...). Minimizing this
+            value finds the equilibrium temperature.
+    """
     return abs(fTe(Te, H1, uw, Ta_in, Td, sat_vp_ta))
 
 
 def equilibrium_temp(dtt1, at, cl, sr, ws, td, te_guess, type='nr'):
+    """
+    Solve for the equilibrium water temperature at a single time
+    step, given meteorological inputs, using one of three solver
+    methods.
+
+    Args:
+        dtt1 (datetime.datetime): The date/time of this
+            observation, used to compute solar reflectance.
+        at (float): Air temperature, in degrees Celsius.
+        cl (float): Cloud cover fraction, from 0 (clear) to 1
+            (fully overcast).
+        sr (float): Incoming shortwave (solar) irradiance, in
+            W/m^2.
+        ws (float): Wind speed.
+        td (float): Dew point temperature, in degrees Celsius.
+        te_guess (float): Initial guess for the equilibrium
+            temperature, used to seed the Newton-Raphson solver (or
+            the scipy minimizer).
+        type (str, optional): Which solver to use:
+            'nr' - Newton-Raphson (fast, default).
+            'bs' - bisection (slower, more robust fallback).
+            'scipy' - scipy.optimize.minimize (not usable in
+                Jython; kept for reference/desktop use only).
+            Defaults to 'nr'.
+
+    Returns:
+        float: The solved equilibrium water temperature, in degrees
+            Celsius.
+
+    Raises:
+        ValueError: If type is not one of the recognized solver
+            names.
+    """
     reflectance = sw_water_reflectance(dtt1, cl)
     Hsw = sr * (1. - reflectance)
     HH = heat_flux_surface_longwave_down(at, cl)
@@ -199,23 +495,43 @@ def equilibrium_temp(dtt1, at, cl, sr, ws, td, te_guess, type='nr'):
 
 
 def calc_equilibrium_temp(dtt, at, cl, sr, td, ws):
-    '''adapted from numpy/scipy routine by Steve, Ben, Scott, which was generated from:
-    "Stratification and heat transfer in lakes and reservoirs" chapter in "Hydrodynamics and Transport
-    for Water Quality Modeling" by Martin and McCutcheon (pg. 373)
+    """
+    Compute a full equilibrium water temperature time series from
+    parallel lists of meteorological data, using the
+    Newton-Raphson solver as primary and bisection as a fallback
+    whenever Newton-Raphson fails or produces a suspect result.
 
-    dtt = list of datetime objects
-    at = list of airtemps [C]
-    cl = list of cloud cover fractions [0-1]
-    sr = shortwave irradiance [W/m2]
-    dp = dewpoint [C]
-    ws = wind speed [m/s]
-    '''
+    Adapted from a numpy/scipy routine originally developed by
+    Steve, Ben, and Scott, based on the method described in
+    "Stratification and heat transfer in lakes and reservoirs"
+    (chapter in "Hydrodynamics and Transport for Water Quality
+    Modeling" by Martin and McCutcheon, pg. 373).
+
+    Args:
+        dtt (list of datetime.datetime): Timestamps for each
+            observation.
+        at (list of float): Air temperatures, in degrees Celsius.
+        cl (list of float): Cloud cover fractions, from 0 (clear)
+            to 1 (fully overcast).
+        sr (list of float): Shortwave irradiance values, in W/m^2.
+        td (list of float): Dew point temperatures, in degrees
+            Celsius.
+        ws (list of float): Wind speed values.
+
+    Returns:
+        list of float: The solved equilibrium water temperature at
+            each timestep, in degrees Celsius, in the same order as
+            the input lists.
+    """
+  
     nt = len(dtt)
     te = []
 
+    # for each timestep, solve for equilibrium temperature, with bisection as a safety net
     for j in range(nt):
 
         #print('Equilibrium step ',j,' of ',nt)
+        # seed the solver with the air temperature on the first step, otherwise the previous solution
         if j == 0:
             x0 = at[j]
         else:
@@ -227,6 +543,7 @@ def calc_equilibrium_temp(dtt, at, cl, sr, td, ws):
         te.append(-999)
         #print(dtt[j], dtt[j].strftime('%Y-%m-%d %H:%M'), at[j], cl[j], sr[j], ws[j], td[j])
         te_bs = equilibrium_temp(dtt[j], at[j], cl[j], sr[j], ws[j], td[j], x0, type='bs')
+        # try the faster Newton-Raphson solver first; fall back to bisection if it raises an error
         try:
             te[j] = equilibrium_temp(dtt[j], at[j], cl[j], sr[j], ws[j], td[j], x0, type='nr')
         except:
@@ -234,6 +551,7 @@ def calc_equilibrium_temp(dtt, at, cl, sr, td, ws):
             te[j] = te_bs
         #print(te[j],te_bs)
 
+        # even if Newton-Raphson succeeded, discard its result if it disagrees too much with bisection
         if abs(te[j] - te_bs) > 1.0:
             #print('  Equilibrium step ',j,' of ',nt, 'Newton-Raphson failure (bad value).  Using bisection-solution equilibrium temp')
             te[j] = te_bs

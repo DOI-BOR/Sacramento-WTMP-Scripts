@@ -53,6 +53,40 @@ model_output_and_target = [ 'model_output','target_temp']
 
 
 def computeAlternative(currentAlternative, computeOptions):
+    """
+    Compute a forecast scripting alternative for the ResSim 5-reservoir
+    model, with optional W2 (water quality) temperature handling.
+
+    Workflow:
+      1. Logs a compute status message to the alternative.
+      2. Runs forecast data preprocessing via
+         Forecast_preprocess.forecast_data_preprocess_ResSim_5Res.
+      3. Determines whether the current run is a W2 run based on the
+         run directory name. If so:
+         - Locates the linked W2 outflow temperature DSS record.
+         - Validates that the record exists and contains data.
+         - Fixes potential timing inaccuracies in the W2 output by
+           snapping timestamps to the top of the hour, padding one
+           hour before and after the record, and linearly
+           interpolating values onto an hourly grid.
+         - Writes the corrected time series back to the DSS file.
+
+    Args:
+        currentAlternative: The alternative object being computed.
+            Must support addComputeMessage(), addComputeErrorMessage(),
+            and getInputDataLocations() for logging and retrieving
+            linked data locations.
+        computeOptions: The compute options/settings object, used to
+            retrieve the run directory and DSS filename for this
+            compute.
+
+    Returns:
+        bool: True if preprocessing completes successfully (and, for
+            W2 runs, the temperature correction completes without
+            error). Returns False if the W2 outflow temperature
+            record is missing or empty. Returns None (implicitly) if
+            data_preprocess fails and no W2 correction path is hit.
+    """
     currentAlternative.addComputeMessage("Computing ScriptingAlternative:" + currentAlternative.getName())
     currentAlternative.addComputeMessage('\n')
 
@@ -95,6 +129,8 @@ def computeAlternative(currentAlternative, computeOptions):
         W2OutflowTempRec = "/W2:two_77.csv/Seg 77 Withdrawal/Temp-TWO//1Hour/" + model_fpart + '/' # TODO: make linked rec
         dssFm = HecDss.open(dss_file)
         tsc = dssFm.get(W2OutflowTempRec,True) # use get with True here to capture entire record, 'read' seems to leave off data randomly
+        
+        # validate that the W2 outflow temperature record exists and has data
         data_check = True
         if tsc is None:
             data_check = False
@@ -102,6 +138,8 @@ def computeAlternative(currentAlternative, computeOptions):
             data_check = False
         elif len(tsc.times) == 0:
             data_check = False
+        
+        # if validation failed, log an error and stop processing
         if not data_check:
             currentAlternative.addComputeErrorMessage('W2 outflow temperature data not found: '+W2OutflowTempRec+' \n')
             return False
@@ -119,6 +157,7 @@ def computeAlternative(currentAlternative, computeOptions):
         values_interp = DSS_Tools.linear_interp_datetime(dtt, tsc.values, dtt_interp)
         hectimes_interp = [HecTime(d.strftime('%d%b%Y %H%M')).value() for d in dtt_interp]
 
+        # build a new time series container since the start time changes
         tsc_shift = TimeSeriesContainer() # have to create a new tsc as the start time changes (don't know another way)
         tsc_shift.startTime = hectimes_interp[0]
         tsc_shift.times = hectimes_interp
@@ -166,5 +205,6 @@ def computeAlternative(currentAlternative, computeOptions):
         dssFm.put(tsc_shift)    
         dssFm.close()
 
+    # if preprocessing succeeded (and, for W2 runs, correction completed above), mark as successful
     if data_preprocess: #and acc_dep:
         return True

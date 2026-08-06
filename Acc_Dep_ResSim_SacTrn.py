@@ -14,6 +14,28 @@ import Simple_DSS_Functions as sdf
 reload(sdf)
 
 def computeAlternative(currentAlternative, computeOptions):
+    """
+    Compute mass-balance ("balance flow") records for Shasta,
+    Keswick, Lewiston, Trinity, and Whiskeytown reservoirs, using
+    create_balance_flows for each, with reservoir-specific inflow,
+    outflow, stage, and evaporation records.
+    Args:
+        currentAlternative: The alternative object being computed.
+            Must support addComputeMessage() and getTimeStep() for
+            logging and retrieving the balance period.
+        computeOptions: The compute options/settings object. Must
+            support getDssFilename(), getRunTimeWindow(), and
+            getRunDirectory().
+
+    Returns:
+        bool: True once balance flow records have been computed and
+            written for Shasta, Keswick, Lewiston, Trinity, and
+            Whiskeytown. River balance calculations noted in a TODO
+            near the end of the function (Trinity River at Limekiln
+            Gulch, Douglas City, and Junction City; Clear Creek at
+            IGO; Sacramento River at Bend Bridge) are not yet
+            implemented.
+    """
     currentAlternative.addComputeMessage("Computing ScriptingAlternative:" + currentAlternative.getName())
     currentAlternative.addComputeMessage('\n')
     dss_file = computeOptions.getDssFilename()
@@ -25,6 +47,7 @@ def computeAlternative(currentAlternative, computeOptions):
     # Evap assumed to be period accumulated length (e.g., ft)
     # Stage assumed to be instantaneous values
     
+    # define options
     run_dir = computeOptions.getRunDirectory()
     project_dir = Project.getCurrentProject().getProjectDirectory()
     currentAlternative.addComputeMessage('project_dir: ' + project_dir)
@@ -32,10 +55,14 @@ def computeAlternative(currentAlternative, computeOptions):
     balance_period_str = currentAlternative.getTimeStep()
     shared_dir = os.path.join(project_dir, 'shared')
 
+    # source DSS file holding all raw/DMS hydrology records for the study
     DMS_hydro_dss_file = os.path.join(shared_dir, "DMS_SacTrnHydroTS.dss")
+    # destination DSS file for resampled/derived records and computed balance flows
     output_dss_file = os.path.join(shared_dir,'DMS_SacTrn_ResSim_Pre-Process.dss')
+    # backup source file used for Keswick's stage/flow data instead of DMS_hydro_dss_file (see below)
     fallback_dss_file = os.path.join(shared_dir,'WTMP_SacTrn_Historical.dss')
 
+    # --- Shasta: resample daily source flows to hourly before building the balance flow ---
     sdf.resample_dss_ts(DMS_hydro_dss_file,'/MR Sac.-Shasta Lake/Sacramento R. a Delta-Flow/Flow//1Day/230.9.125.1.1/',rtw,output_dss_file,'1HOUR')
     sdf.resample_dss_ts(DMS_hydro_dss_file,'/MR Sac.-Shasta Lake/McCloud River-Flow/Flow//1Day/230.8.125.1.1/',rtw,output_dss_file,'1HOUR')
     # Pit river is recorded at GMT midnight, and so when requesting the run time windows from DSS, the last day is left off the record.
@@ -44,12 +71,15 @@ def computeAlternative(currentAlternative, computeOptions):
     sdf.resample_dss_ts(DMS_hydro_dss_file,'/MR Sac.-Shasta Lake/Pit R. Branch-Flow/Flow//1Day/230.6.125.1.1/',rtw,output_dss_file,'1HOUR')
     sdf.resample_dss_ts(DMS_hydro_dss_file,'/MR SAC.-SHASTA LAKE/SULANHARAS CREEK-FLOW/Flow//1Day/230.7.125.1.1/',rtw,output_dss_file,'1HOUR')
         
-
+    # Shasta's total inflow: sum of the four tributary records just resampled above,
+    # each read back from output_dss_file (via the 'file::path' alternate-file syntax)
     inflow_records = ['::'.join([output_dss_file,'/MR Sac.-Shasta Lake/McCloud River-Flow/Flow//1Hour/230.8.125.1.1/']),
                       '::'.join([output_dss_file,'/MR Sac.-Shasta Lake/Sacramento R. a Delta-Flow/Flow//1Hour/230.9.125.1.1/']),
                       '::'.join([output_dss_file,'/MR Sac.-Shasta Lake/Pit R. Branch-Flow/Flow//1Hour/230.6.125.1.1/']),
                       '::'.join([output_dss_file,'/MR SAC.-SHASTA LAKE/SULANHARAS CREEK-FLOW/Flow//1Hour/230.7.125.1.1/']),]
 
+    # Shasta's total outflow: spill, three derived outlet-gate-level flow sums
+    # (computed upstream of this function and stored in output_dss_file), and generation release
     outflow_records = ['/MR Sac.-Shasta Lake/SHA-Spill Release/Flow//1Hour/230.11.125.4.1/',
                        '::'.join([output_dss_file,'/MR Sac.-Shasta Lake/SHA-Outlet Flow 950 Sum/Flow//1Hour/Derived/']),
                        '::'.join([output_dss_file,'/MR Sac.-Shasta Lake/SHA-Outlet Flow 850 Sum/Flow//1Hour/Derived/']),
@@ -69,11 +99,13 @@ def computeAlternative(currentAlternative, computeOptions):
     evap_dss_record_name = "/SHASTA RESERVOIR/EVAP FLOW/FLOW//1HOUR/DERIVED/"
     storage_dss_record_name = "/SHASTA RESERVOIR/STORAGE/FLOW//1HOUR/DERIVED/"
     output_dss_record_name = "/SHASTA RESERVOIR/BALANCE FLOW/FLOW//1HOUR/DERIVED/"
+    # select an alternate output record name if conic interpolation and/or zero-evap is being used
     if use_conic:
         output_dss_record_name = "/SHASTA RESERVOIR/BALANCE FLOW/FLOW//1HOUR/DERIVED-CONIC INTERP/"
         if 'ZEROS' in evap_record:
             output_dss_record_name = "/SHASTA RESERVOIR/BALANCE FLOW/FLOW//1HOUR/DERIVED-CONIC INTERP NO EVAP/"
 
+    # compute and write Shasta's balance flow (plus a resampled daily copy, per alt_period below)
     cbfj.create_balance_flows(currentAlternative, rtw, 'Shasta', inflow_records, outflow_records, stage_record, evap_record,
                                 elev_stor_area, DMS_hydro_dss_file, output_dss_record_name, output_dss_file, shared_dir,
                                 evap_dss_record_name=evap_dss_record_name, storage_dss_record_name=storage_dss_record_name,
@@ -87,6 +119,7 @@ def computeAlternative(currentAlternative, computeOptions):
     # Evap assumed to be period accumulated length (e.g., ft)
     # Stage assumed to be instantaneous values
 
+    # --- Keswick: reuses Shasta's derived outlet flows as part of its own inflow ---
     inflow_records = ['::'.join([DMS_hydro_dss_file,'/MR Sac.-Shasta Lake/SHA-Generation Release/Flow//1Hour/230.11.125.3.1/']),
                       '::'.join([DMS_hydro_dss_file,'/MR Sac.-Shasta Lake/SHA-Spill Release/Flow//1Hour/230.11.125.4.1/']),
                       '::'.join([output_dss_file,'/MR Sac.-Shasta Lake/SHA-Outlet Flow 950 Sum/Flow//1Hour/Derived/']),
@@ -96,14 +129,17 @@ def computeAlternative(currentAlternative, computeOptions):
                       '::'.join([DMS_hydro_dss_file,'/MR Sac.-Keswick Res./Spring Creek Debris Dam (SPR)-Dam Total Release/Flow//1Hour/234.2.125.1.1/']),
                       ]
 
+    # Keswick's only modeled outflow is its own dam release
     outflow_records = ['::'.join([DMS_hydro_dss_file,'/MR Sac.-Keswick Res./KES-Dam Total Release/Flow//1Hour/234.1.125.1.1/'])]
     
 
     stage_record = '::'.join([DMS_hydro_dss_file,'/MR Sac.-Keswick Res./KES-Reservoir Elevation/Elev//1Hour/234.1.145.1.1/'])
+    # Keswick also uses a constant-zero evaporation record
     evap_record = '::'.join([output_dss_file,'//ZEROS/FLOW//1HOUR/ZEROS/'])
 
     elev_stor_area = cbfj.read_elev_storage_area_file(os.path.join(shared_dir, 'AMR_scratch_keswick.csv'), 'Keswick') #TODO: check this
 
+    # same interpolation/output configuration pattern as Shasta above
     use_conic = False
     write_evap = False
     write_storage = False
@@ -111,11 +147,14 @@ def computeAlternative(currentAlternative, computeOptions):
     evap_dss_record_name = "/KESWICK RESERVOIR/EVAP FLOW/FLOW//1HOUR/DERIVED/"
     storage_dss_record_name = "/KESWICK RESERVOIR/STORAGE/FLOW//1HOUR/DERIVED/"
     output_dss_record_name = "/KESWICK RESERVOIR/BALANCE FLOW/FLOW//1HOUR/DERIVED/"
+    # select an alternate output record name if conic interpolation and/or zero-evap is being used
     if use_conic:
         output_dss_record_name = "/KESWICK RESERVOIR/BALANCE FLOW/FLOW//1HOUR/DERIVED-CONIC INTERP/"
         if 'ZEROS' in evap_record:
             output_dss_record_name = "/KESWICK RESERVOIR/BALANCE FLOW/FLOW//1HOUR/DERIVED-CONIC INTERP NO EVAP/"
 
+    # compute and write Keswick's balance flow; note this call reads from fallback_dss_file
+    # rather than DMS_hydro_dss_file, unlike the other reservoirs in this function
     cbfj.create_balance_flows(currentAlternative, rtw, 'Keswick', inflow_records, outflow_records, stage_record, evap_record,
                                 elev_stor_area, fallback_dss_file, output_dss_record_name, output_dss_file, shared_dir,
                                 evap_dss_record_name=evap_dss_record_name, storage_dss_record_name=storage_dss_record_name,
@@ -153,6 +192,7 @@ def computeAlternative(currentAlternative, computeOptions):
     evap_dss_record_name = "/LEWISTON RESERVOIR/EVAP FLOW/FLOW//1HOUR/DERIVED/"
     storage_dss_record_name = "/LEWISTON RESERVOIR/STORAGE/FLOW//1HOUR/DERIVED/"
     output_dss_record_name = "/LEWISTON RESERVOIR/BALANCE FLOW/FLOW//1HOUR/DERIVED/"
+    # select an alternate output record name if conic interpolation and/or zero-evap is being used
     if use_conic:
         output_dss_record_name = "/LEWISTON RESERVOIR/BALANCE FLOW/FLOW//1HOUR/DERIVED-CONIC INTERP/"
         if 'ZEROS' in evap_record:
@@ -268,6 +308,19 @@ def computeAlternative(currentAlternative, computeOptions):
 
 
 def compute_W2_forecast_balance(currentAlternative, computeOptions):
+    """
+    Compute a Lewiston reservoir mass-balance ("balance flow")
+    record for use in W2 forecast runs, using create_balance_flows,
+    writing results to the forecast DSS file rather than the
+    historical/pre-process DSS file used by computeAlternative.
+    Args:
+        currentAlternative: The alternative object being computed.
+            Must support addComputeMessage() and getTimeStep() for
+            logging and retrieving the balance period.
+        computeOptions: The compute options/settings object. Must
+            support getDssFilename(), getRunTimeWindow(), and
+            getRunDirectory().
+    """
     currentAlternative.addComputeMessage("Computing ScriptingAlternative:" + currentAlternative.getName())
     currentAlternative.addComputeMessage('\n')
     dss_file = computeOptions.getDssFilename()
@@ -294,12 +347,17 @@ def compute_W2_forecast_balance(currentAlternative, computeOptions):
     # Evap assumed to be period accumulated length (e.g., ft)
     # Stage assumed to be instantaneous values
 
+    # Lewiston sits immediately downstream of Trinity Dam, so its inflow is
+    # everything Trinity Lake released: generation, all three outlet gates, and spill
     inflow_records = ['/MR Sac.-Trinity Lake/TRN-Generation Release/Flow//1Hour/231.5.125.2.1/',
                       '/MR Sac.-Trinity Lake/TRN-Outlet Release G1/Flow//1Hour/231.5.125.7.1/',
                       '/MR Sac.-Trinity Lake/TRN-Outlet Release G2/Flow//1Hour/231.5.125.8.1/',
                       '/MR Sac.-Trinity Lake/TRN-Outlet Release G3/Flow//1Hour/231.5.125.9.1/',
                       '/MR Sac.-Trinity Lake/TRN-Spill Release/Flow//1Hour/231.5.125.3.1/']
 
+    # Lewiston's outflow: the Clear Creek Tunnel diversion (via Judge Cavanaugh Regulating
+    # Reservoir - JCR), the fish hatchery release, and Lewiston's own generation, outlet,
+    # and spill releases at Lewiston Dam
     outflow_records = ['/MR Sac.-Whiskeytown Lake/JCR-Generation Release/Flow//1Hour/233.13.125.1.1/', #lewiston  CC diversion tunnel: Clear Creek Transfer operation
                        '/MR Sac.-Lewiston Res./LEW-Fish Hatchery Release/Flow//1Hour/232.12.125.1.1/',
                        '/MR Sac.-Lewiston Res./LEW-Generation Release Hrly/Flow//1Hour/232.12.125.3.1/',

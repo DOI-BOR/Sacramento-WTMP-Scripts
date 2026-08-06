@@ -11,17 +11,21 @@ search_list = ["SacTrn", "Sacramento", "American", "Stanislaus"]
 
 # initialize and search for unwanted paths
 matching_paths = []
+# loop through every entry currently on sys.path
 for p in sys.path:
+    # if this path contains any of the unwanted phrases, mark it for removal
     if any(phrase in p for phrase in search_list):
         matching_paths.append(p)
 
 # print paths containing unwanted phrases
 print("Paths to be removed:")
+# loop through the matched paths and log each one before removal
 for path in matching_paths:
     print(path)
 
 # remove matching paths from sys.path
 for path in matching_paths:
+    # double check the path is still present before attempting to remove it
     if path in sys.path:
         sys.path.remove(path)
 
@@ -31,17 +35,37 @@ sys.path.append(os.path.join(Project.getCurrentProject().getWorkspacePath(), "sc
 import DMS_preprocess
 reload(DMS_preprocess)
 
+# list of prescribed W2 model alternatives that need their annual input
 W2_models_for_input_copy = ['W2 Trinity Prescribed','W2 Lewiston Prescribed','W2 Whiskeytown Prescribed',
                             'W2 Shasta Prescribed','W2 Keswick Prescribed', 'W2 Keswick Prescribed v45']
 
 def backdate_W2_files_to_skip_compute(run_dir):
+    """
+    Backdate all W2 model files in the study's cequal-w2 folder so that
+    W2 treats them as unchanged and skips recomputation.
+
+    Walks the entire cequal-w2 directory tree under the study directory
+    (derived from run_dir) and sets each file's modification time to
+    7 days before the current time, while keeping its original creation
+    time. This is typically used during testing to avoid triggering a
+    full W2 simulation recompute.
+
+    Args:
+        run_dir: Path to the W2 run directory for the current alternative.
+
+    Returns:
+        None
+    """
     study_dir = study_dir_from_run_dir(run_dir)
     
     current_time = time.time()
     modification_time = current_time - 3600*24*7  # Subtract 7 days (in seconds)
     
+    # walk the entire cequal-w2 directory tree under the study directory
     for root, dirs, files in os.walk(os.path.join(study_dir,'cequal-w2')):
+        # loop through each file found in the current directory
         for file in files:
+            # skip hidden files (those starting with a dot)
             if not file.startswith('.'):
                 file_path = os.path.join(root,file)
                 print("Changing modified time: ",file_path)
@@ -49,12 +73,43 @@ def backdate_W2_files_to_skip_compute(run_dir):
                 os.utime(file_path,(creation_time,modification_time))
 
 def study_dir_from_run_dir(run_dir):
+    """
+    Derive the top-level study directory from a W2 run directory.
+
+    Walks up three directory levels from the given run directory
+    (run directory -> W2 simulation folder -> runs folder -> study
+    folder) to find the root study directory.
+
+    Args:
+        run_dir: Path to the W2 run directory for the current alternative.
+
+    Returns:
+        str: The path to the top-level study directory.
+    """
     w2sim,_ = os.path.split(run_dir)
     runs_dir,_ = os.path.split(w2sim)
     study_dir,_ = os.path.split(runs_dir)
     return study_dir
 
 def annual_config_dirs_from_run_dir(run_dir,model_name,startyear_str):
+    """
+    Build the model, annual config, and base directory paths for a
+    given W2 model and start year.
+
+    Uses the study directory (derived from run_dir) along with the
+    model name and start year to construct the paths to: the W2 model's
+    working directory, the annual configuration directory for the given
+    start year, and the base directory used to store the original,
+    unmodified model input files.
+
+    Args:
+        run_dir: Path to the W2 run directory for the current alternative.
+        model_name: Name of the W2 model, e.g. 'W2 Trinity Prescribed'.
+        startyear_str: The forecast start year as a string, e.g. '2016'.
+
+    Returns:
+        tuple: A 3-tuple of (model_dir, annual_config_dir, base_dir) paths.
+    """
     study_dir = study_dir_from_run_dir(run_dir)
     model_dir = os.path.join(study_dir,'cequal-w2',model_name,model_name)  # don't know why this is two model_names deep!!
     annual_config_dir = os.path.join(study_dir,'shared','W2_annual_configs',model_name,startyear_str)
@@ -62,6 +117,32 @@ def annual_config_dirs_from_run_dir(run_dir,model_name,startyear_str):
     return model_dir,annual_config_dir,base_dir
 
 def computeAlternative(currentAlternative, computeOptions):
+    """
+    Compute the W2 5-Reservoir Prescribed v45 Sacramento Trinity
+    pre-processing alternative.
+
+    For each prescribed W2 model in W2_models_for_input_copy, this
+    function locates the model's annual configuration directory for the
+    run's start year, clears out the model's existing input files
+    (keeping only the .w2Alt/.w2Alt.bak files), and copies in the
+    correct annual configuration input files. It then runs the DMS
+    pre-processing step (DMS_preprocess.preprocess_W2_5Res) to finish
+    preparing the 5-reservoir W2 simulation inputs.
+
+    A default-year fallback block and an accumulated deposition compute
+    step are present in the code but currently commented out, along
+    with an optional file-backdating step used for skipping recompute
+    during testing.
+
+    Args:
+        currentAlternative: The ScriptingAlternative being computed.
+            Type: hec2.wat.plugin.java.impl.scripting.model.ScriptPluginAlt
+        computeOptions: The compute options for this run.
+            Type: hec.wat.model.ComputeOptions
+
+    Returns:
+        bool: True once the pre-processing steps have completed.
+    """
     currentAlternative.addComputeMessage("Computing ScriptingAlternative:" + currentAlternative.getName() )
 
     rtw = computeOptions.getRunTimeWindow()
@@ -70,10 +151,13 @@ def computeAlternative(currentAlternative, computeOptions):
     currentAlternative.addComputeMessage('Found start year for W2 simulations:'+startyear_str)
     endtime_str = rtw.getEndTimeString()
     endyear_str = endtime_str[5:9]
+    # warn if the run time window spans more than one calendar year, since
+    # the W2 annual configuration setup assumes a single start year
     if startyear_str != endyear_str:
         currentAlternative.addComputeMessage('WARNING: Start year ({0}) is different from end year ({1}); W2 simulations will likely fail.'.format(starttime_str, endtime_str))    
 
     run_dir = computeOptions.getRunDirectory()
+    # loop through each prescribed W2 model that needs its annual input
     for W2_model in W2_models_for_input_copy:
         model_dir,annual_config_dir,base_dir = annual_config_dirs_from_run_dir(run_dir,W2_model,startyear_str)
         currentAlternative.addComputeMessage('model_dir: '+model_dir)
