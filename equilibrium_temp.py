@@ -2,7 +2,7 @@
 Equilibrium Temperature Utilities
 
 This module implements shortwave/longwave radiation terms and iterative
-root-finding routines (Newton–Raphson and bisection) to estimate the
+root-finding routines (Newton-Raphson and bisection) to estimate the
 water surface equilibrium temperature, adapted for Jython/Python use in
 HEC-WAT / WTMP workflows.
 
@@ -201,10 +201,13 @@ def newton_raphson_solve(f, df, x0, H1, uw, Ta_in, Td, sat_vp_ta, tol=1e-2, max_
         
         # derivative value
         dfx_old = df(x_old, H1, uw, Ta_in, Td, sat_vp_ta) 
-
+        
         # a near-zero derivative would make the update step unstable/undefined
         if abs(dfx_old) < tol:
             raise ValueError("Derivative near zero")  # halt to avoid blow-up
+            
+        # Calculate the new value
+        x_new = x_old - fx_old / dfx_old
 
         # if the estimate has stopped changing meaningfully, treat it as converged
         if abs(x_new - x_old) < tol:

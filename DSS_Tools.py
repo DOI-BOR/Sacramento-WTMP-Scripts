@@ -224,7 +224,7 @@ def copy_dss_ts(dss_rec,new_fpart=None,new_dss_rec=None,
         T_values = tsc.values  # get values
         
         for i, TT in enumerate(T_values):
-            T_values[i] = (TT - 32.0) * 5.0 / 9.0  # convert °F -> °C in-place
+            T_values[i] = (TT - 32.0) * 5.0 / 9.0  # convert F -> C in-place
         
     # write
     tsc.fullName = dss_rec_out
@@ -1497,7 +1497,7 @@ def airtemp_lapse(dss_file,dss_rec,lapse_in_C,dss_outfile,f_part):
     lapse = lapse_in_C
     # if the source series is in Fahrenheit, convert the lapse amount to an equivalent Fahrenheit offset
     if 'f' in tsm.getUnits().lower():
-        lapse = lapse * 9.0 / 5.0 + 32.0  # convert to °F if series units are Fahrenheit
+        lapse = lapse * 9.0 / 5.0 + 32.0  # convert to F if series units are Fahrenheit
     
     # Add the values to the series
     tsm = tsm.add(lapse) 
@@ -1569,7 +1569,7 @@ def min_ts(dss_file,dss_rec,min_value,dss_outfile,f_part):
 
 
 def add_flows(currentAlt, timewindow, inflow_records, dss_file, output_dss_record_name, output_dss_file):
-     """
+    """
     Sum multiple flow time series together and write the combined
     flow record to a new output file.
 
@@ -1609,15 +1609,8 @@ def add_flows(currentAlt, timewindow, inflow_records, dss_file, output_dss_recor
         Calls `sys.exit(-1)` if a `HecMathException` occurs while
         reading any of the input records.
 
-    Notes
-    -----
-    **Known issue:** This function's body (including its docstring)
-    is indented one level deeper than the `def` line in the original
-    source (an extra leading space before `"""`). As written, this is
-    invalid Python/Jython and would raise an `IndentationError` if
-    imported; it has been left unchanged per instructions, but is
-    flagged here for visibility.
     """
+	
     #cfs_2_acreft = balance_period * 3600. / 43559.9
     #acreft_2_cfs = 1. / cfs_2_acreft
 
@@ -2015,9 +2008,9 @@ def calculate_relative_humidity(air_temp, dewpoint_temp):
     Parameters
     ----------
     air_temp : float
-        Air temperature in °C.
+        Air temperature in C.
     dewpoint_temp : float
-        Dew point temperature in °C.
+        Dew point temperature in C.
 
     Returns
     -------
@@ -2050,20 +2043,20 @@ def calculate_dewpoint(air_temp, relative_humidity):
     Parameters
     ----------
     air_temp : float
-        Air temperature in °C.
+        Air temperature in C.
     relative_humidity : float
         Relative humidity (0-100%).
 
     Returns
     -------
     float
-        Dew point temperature in °C.
+        Dew point temperature in C.
     """
 
     gamma = math.log(relative_humidity / 100.0) + (17.62 * air_temp) / (243.12 + air_temp)  # intermediate term
     dewpoint = 243.12 * gamma / (17.62 - gamma)  # invert ARM
     
-    return dewpoint  # dew point in °C
+    return dewpoint  # dew point in C
 
 
 def relhum_from_at_dp(met_dss_file, at_path, dp_path):

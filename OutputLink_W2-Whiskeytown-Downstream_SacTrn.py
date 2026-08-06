@@ -8,7 +8,7 @@ operations during a WAT Scripting Alternative compute:
 
 1. **Flow Combination (Whiskeytown downstream link)**  
    Reads a base time series and adds one additional time series (first two input
-   locations only), converting units (CMS → CFS) as needed, and writes the
+   locations only), converting units (CMS to CFS) as needed, and writes the
    combined time series to the model's DSS file. A log message reports the
    number of written values.
 
@@ -279,7 +279,6 @@ def computeAlternative(currentAlternative, computeOptions):
 
     # Refresh input locations (Spring Creek tunnel expected as the last location)
     locations = currentAlternative.getInputDataLocations()   
-    SpringCreek = locations[-1]               # Take the final input location as Spring Creek
     
     # resolve the Spring Creek input location's DSS path, correcting its F-part
     SpringCreek = locations[-1]
@@ -329,10 +328,9 @@ def computeAlternative(currentAlternative, computeOptions):
     tsc.numberValues = len(new_values)
     tsc.startHecTime = rtw.getStartTime()
     tsc.endHecTime = rtw.getEndTime()
+    
     # write the heated series to the second output location
     dssFm.write(tsc)
-
-    dssFm.write(tsc)  # Write the heated Spring Creek series
 
     # Write a copy out using the input model f-part, so that plotting will be able to use it with the input model
     tsc.fullName = fixFpartToInput(tspath, outputpath)  # Mirror input F-part for plot compatibility
