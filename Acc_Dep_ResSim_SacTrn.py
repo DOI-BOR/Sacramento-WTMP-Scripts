@@ -1,4 +1,3 @@
-
 """
 create_balance_flows for WTMP (Sacramento-Trinity System)
 =========================================================
@@ -56,26 +55,38 @@ reload(sdf)                                # Jython: reload to pick up any recen
 
 def computeAlternative(currentAlternative, computeOptions):
     """
-    Compute mass-balance ("balance flow") records for Shasta,
-    Keswick, Lewiston, Trinity, and Whiskeytown reservoirs, using
-    create_balance_flows for each, with reservoir-specific inflow,
-    outflow, stage, and evaporation records.
-    Args:
-        currentAlternative: The alternative object being computed.
-            Must support addComputeMessage() and getTimeStep() for
-            logging and retrieving the balance period.
-        computeOptions: The compute options/settings object. Must
-            support getDssFilename(), getRunTimeWindow(), and
-            getRunDirectory().
+    Compute mass-balance ("balance flow") records for five northern
+    reservoirs.
 
-    Returns:
-        bool: True once balance flow records have been computed and
-            written for Shasta, Keswick, Lewiston, Trinity, and
-            Whiskeytown. River balance calculations noted in a TODO
-            near the end of the function (Trinity River at Limekiln
-            Gulch, Douglas City, and Junction City; Clear Creek at
-            IGO; Sacramento River at Bend Bridge) are not yet
-            implemented.
+    Computes balance flows for Shasta, Keswick, Lewiston, Trinity,
+    and Whiskeytown reservoirs, using `create_balance_flows` for
+    each, with reservoir-specific inflow, outflow, stage, and
+    evaporation records.
+
+    Parameters
+    ----------
+    currentAlternative : object
+        The alternative object being computed. Must support
+        `addComputeMessage()` and `getTimeStep()` for logging and
+        retrieving the balance period.
+    computeOptions : object
+        The compute options/settings object. Must support
+        `getDssFilename()`, `getRunTimeWindow()`, and
+        `getRunDirectory()`.
+
+    Returns
+    -------
+    bool
+        True once balance flow records have been computed and
+        written for Shasta, Keswick, Lewiston, Trinity, and
+        Whiskeytown.
+
+    Notes
+    -----
+    River balance calculations noted in a TODO near the end of the
+    function (Trinity River at Limekiln Gulch, Douglas City, and
+    Junction City; Clear Creek at IGO; Sacramento River at Bend
+    Bridge) are not yet implemented.
     """
     currentAlternative.addComputeMessage("Computing ScriptingAlternative:" + currentAlternative.getName())
     currentAlternative.addComputeMessage('\n')  # Log spacer for readability
@@ -410,16 +421,36 @@ def computeAlternative(currentAlternative, computeOptions):
 def compute_W2_forecast_balance(currentAlternative, computeOptions):
     """
     Compute a Lewiston reservoir mass-balance ("balance flow")
-    record for use in W2 forecast runs, using create_balance_flows,
-    writing results to the forecast DSS file rather than the
-    historical/pre-process DSS file used by computeAlternative.
-    Args:
-        currentAlternative: The alternative object being computed.
-            Must support addComputeMessage() and getTimeStep() for
-            logging and retrieving the balance period.
-        computeOptions: The compute options/settings object. Must
-            support getDssFilename(), getRunTimeWindow(), and
-            getRunDirectory().
+    record for use in W2 forecast runs.
+
+    Uses `create_balance_flows`, writing results to the forecast DSS
+    file rather than the historical/pre-process DSS file used by
+    `computeAlternative`.
+
+    Parameters
+    ----------
+    currentAlternative : object
+        The alternative object being computed. Must support
+        `addComputeMessage()` and `getTimeStep()` for logging and
+        retrieving the balance period.
+    computeOptions : object
+        The compute options/settings object. Must support
+        `getDssFilename()`, `getRunTimeWindow()`, and
+        `getRunDirectory()`.
+
+    Returns
+    -------
+    None
+        Writes the Lewiston balance-flow record (and a resampled
+        6-hour copy) to the forecast DSS file.
+
+    Notes
+    -----
+    **Known issue:** `DMS_hydro_dss_file` is used as the source DSS
+    file passed to `cbfj.create_balance_flows` at the end of this
+    function, but it is never defined anywhere within this function
+    (unlike `computeAlternative`, which does define it). As written,
+    this will raise a `NameError` when this function is called.
     """
     currentAlternative.addComputeMessage("Computing ScriptingAlternative:" + currentAlternative.getName())
     currentAlternative.addComputeMessage('\n')  # Spacer for logs

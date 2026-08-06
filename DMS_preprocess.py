@@ -78,8 +78,12 @@ units_need_fixing = ['tenths','deg','kph'] #'radians',]  # 'radians' handled in 
 
 def fix_DMS_types_units(dss_file):
     """
-    Standardize DMS record types/units in-place. This method was implemented to change data types to PER-AVER that 
-    are not coming from the DMS that way
+    Standardize DMS record types and units in-place.
+
+    This method was implemented to change data types to `PER-AVER`
+    for records that are not coming from the DMS that way, and to
+    normalize a handful of oddball unit labels into standard/derived
+    forms.
 
     Parameters
     ----------
@@ -100,6 +104,9 @@ def fix_DMS_types_units(dss_file):
       * `deg` → `radians` (values × 2π / 360)
       * `kph` → `m/s` (values ÷ 3.6)
     - Skips paired, scalar/text, and special mapping/control paths.
+    - Unlike `fix_DMS_types_units_old`, this version reads/writes via
+      the fast `dss.get()`/`dss.put()` `TimeSeriesContainer` path
+      rather than the `tsmath` wrapper.
     """
 
     # Retrieve cleaned list of DSS pathnames
@@ -179,8 +186,13 @@ def fix_DMS_types_units(dss_file):
 
 def fix_DMS_types_units_old(dss_file):
     """
-    Standardize DMS records. This method was implemented to change data types to PER-AVER that are not 
-    coming from the DMS that way
+    Standardize DMS records (legacy implementation).
+
+    This method was implemented to change data types to `PER-AVER`
+    for records that are not coming from the DMS that way. It is the
+    older counterpart to `fix_DMS_types_units`, using the `tsmath`
+    wrapper for reads/transforms rather than reading raw
+    `TimeSeriesContainer` objects directly.
 
     Parameters
     ----------
@@ -196,7 +208,8 @@ def fix_DMS_types_units_old(dss_file):
     -----
     - Uses `dss.read` (math container) to set type and units, then writes
       the underlying `TimeSeriesContainer`.
-    - Includes additional `m/s → W2link` copy for wind speed workaround.
+    - Includes additional `m/s → W2link` copy for wind speed workaround,
+      which the newer `fix_DMS_types_units` does not perform.
     """
     
     # Gather sanitized DSS record list
@@ -667,9 +680,7 @@ def combine_shasta_gates_flows(currentAlt,timewindow,hydro_dss,output_dss_file):
     
 def leakage(gen_flow,nMidGates,nLowGates,nSideGates,WSE,pre2010=False):
     """
-    Estimate leakage flow through a dam's gate levels, based on
-    total generation flow, the number of open gates at each level,
-    and current water surface elevation (WSE).
+    Estimate leakage flow through a dam's gate levels.
 
     Total leakage is first estimated as a fraction of generation
     flow, then split across six leakage points (LKG1-LKG6) using
@@ -682,25 +693,37 @@ def leakage(gen_flow,nMidGates,nLowGates,nSideGates,WSE,pre2010=False):
     their withdrawal elevation, since a leakage point cannot leak
     water it cannot reach.
 
-    Args:
-        gen_flow (float): Total generation (powerhouse) flow, used
-            as the basis for estimating total leakage flow.
-        nMidGates (int): Number of open gates at the mid gate level.
-            Only used in the pre-2010 calculation.
-        nLowGates (int): Number of open gates at the low gate level.
-        nSideGates (int): Number of open gates at the side gate
-            level.
-        WSE (float): Current water surface elevation, in feet,
-            used to determine which leakage points are still
-            submerged.
-        pre2010 (bool, optional): If True, use the pre-2010
-            empirical leakage percentage splits. If False (default),
-            use the post-2010 splits.
+    Parameters
+    ----------
+    gen_flow : float
+        Total generation (powerhouse) flow, used as the basis for
+        estimating total leakage flow.
+    nMidGates : int
+        Number of open gates at the mid gate level. Only used in the
+        pre-2010 calculation.
+    nLowGates : int
+        Number of open gates at the low gate level.
+    nSideGates : int
+        Number of open gates at the side gate level.
+    WSE : float
+        Current water surface elevation, in feet, used to determine
+        which leakage points are still submerged.
+    pre2010 : bool, optional
+        If True, use the pre-2010 empirical leakage percentage
+        splits. If False (default), use the post-2010 splits.
 
-    Returns:
-        list of float: [LKG1, LKG2, LKG3, LKG4, LKG5, LKG6], the
-            estimated leakage flow at each of the six leakage
-            points, in the same units as gen_flow.
+    Returns
+    -------
+    list of float
+        `[LKG1, LKG2, LKG3, LKG4, LKG5, LKG6]`, the estimated leakage
+        flow at each of the six leakage points, in the same units as
+        `gen_flow`.
+
+    Notes
+    -----
+    The elevation bands used to taper/zero the upper leakage points
+    (945-1000 ft, 900-945 ft, 831-900 ft) are hardcoded to the
+    specific dam being modeled.
     """
     # select the empirical leakage percentage splits based on dam configuration era
     if pre2010:
@@ -764,11 +787,16 @@ def get_w2_withdraw_points(nUpperGates,nMidGates,nLowGates,nSideGates,WSE,withdr
     list of str
         List of withdrawal point identifiers (e.g., `['TCDU1','TCDU2']`).
 
+    Raises
+    ------
+    SystemExit
+        Calls `sys.exit(-1)` if no qualifying withdrawal points can be
+        determined for any gate level, even after the fallback logic.
+
     Notes
     -----
     - Withdraw points must lie at least 3 ft below WSE.
     - Falls back to highest available level if no open-gate points qualify.
-    - Exits with error (−1) if no qualifying points can be determined.
     """
 
     # Define the gate levels and the number of gates that are open
@@ -806,9 +834,8 @@ def get_w2_withdraw_points(nUpperGates,nMidGates,nLowGates,nSideGates,WSE,withdr
 
 def repeat_annual_daily_over_timewindow(timewindow,annual_dss_file,annual_dss_rec,output_dss_file,out_rec):
     """
-    Repeat a single 365-value annual daily pattern across every
-    year spanned by a run time window, producing a continuous daily
-    time series covering the full window.
+    Repeat a single 365-value annual daily pattern across every year
+    spanned by a run time window.
 
     For each year in the window's range, the same 365 daily values
     are copied in as-is, with timestamps generated for that specific
@@ -816,22 +843,29 @@ def repeat_annual_daily_over_timewindow(timewindow,annual_dss_file,annual_dss_re
     that year's block (a repeat of the year's last value) so that
     366 daily timestamps are produced instead of 365.
 
-    Args:
-        timewindow: The run time window object, used to determine
-            the starting and ending calendar years to cover.
-        annual_dss_file (str): Path to the DSS file containing the
-            source annual daily pattern record.
-        annual_dss_rec (str): DSS path of the source record. Must
-            contain exactly 365 daily values representing one
-            calendar year's pattern.
-        output_dss_file (str): Path to the DSS file to write the
-            repeated multi-year series to.
-        out_rec (str): DSS path to write the resulting record to.
+    Parameters
+    ----------
+    timewindow : object
+        The run time window object, used to determine the starting
+        and ending calendar years to cover.
+    annual_dss_file : str
+        Path to the DSS file containing the source annual daily
+        pattern record.
+    annual_dss_rec : str
+        DSS path of the source record. Must contain exactly 365
+        daily values representing one calendar year's pattern.
+    output_dss_file : str
+        Path to the DSS file to write the repeated multi-year series
+        to.
+    out_rec : str
+        DSS path to write the resulting record to.
 
-    Returns:
-        None. Writes a daily time series spanning from the start
-        year through the end year of timewindow (inclusive) to
-        out_rec in output_dss_file.
+    Returns
+    -------
+    None
+        Writes a daily time series spanning from the start year
+        through the end year of `timewindow` (inclusive) to `out_rec`
+        in `output_dss_file`.
     """
     start_year = HecTime(timewindow.getStartTimeString()).year()
     end_year = HecTime(timewindow.getEndTimeString()).year()
@@ -873,7 +907,8 @@ def repeat_annual_daily_over_timewindow(timewindow,annual_dss_file,annual_dss_re
 
 def W2_shasta_TCD_flow(timewindow,hydro_dss,output_dss_file):
     """
-    Compute CE‑QUAL‑W2 TCD withdrawal flows for Shasta based on gates and WSE.
+    Compute CE-QUAL-W2 TCD withdrawal flows for Shasta based on
+    gates and WSE.
 
     Parameters
     ----------
@@ -889,6 +924,27 @@ def W2_shasta_TCD_flow(timewindow,hydro_dss,output_dss_file):
     None
         Writes hourly flows for each W2 sink (`TCDU/M/L/S1–3`, leakage `LKG1–6`,
         and `TCD_down`) under `/SHA-W2-TCD-*/Flow//1Hour/Derived/`.
+
+    Raises
+    ------
+    SystemExit
+        Calls `sys.exit(-1)` if the source elevation record's units
+        are neither feet nor meters.
+
+    Notes
+    -----
+    Algorithm, per timestep:
+      1. Assign all generation flow initially to the highest open
+         gate level.
+      2. Determine active withdrawal points via
+         `get_w2_withdraw_points` and leakage components via
+         `leakage`.
+      3. Route 35% of the (non-leaked) flow to `TCD_down` if any side
+         gates are open, then split the remainder evenly across the
+         active withdrawal points.
+      4. Perform a mass-balance sanity check, printing diagnostics if
+         the sum of computed sink flows does not match `gen_flow`
+         (rounded to the nearest integer).
     """
     
     # W2 TCD point sink elevations - hard code those here
@@ -1007,22 +1063,37 @@ def W2_shasta_TCD_flow(timewindow,hydro_dss,output_dss_file):
 def preprocess_W2_5Res(currentAlternative, computeOptions):
     """
     Preprocess DMS hydrology and meteorology data for the CE-QUAL-W2
-    5-reservoir Sacramento/Trinity model: fixes data types/units,
-    creates constant reference records, splices in Redding met data
-    for Lewiston, computes reservoir outflows and TCD flow, enforces
-    minimum flows to avoid zero-flow issues in W2, and corrects a
-    known Pit River timestamp offset. 
-    Args:
-        currentAlternative: The alternative object being computed.
-            Must support addComputeMessage() and getTimeStep() for
-            logging and retrieving the balance period.
-        computeOptions: The compute options/settings object. Must
-            support getRunDirectory() to locate the current run.
+    5-reservoir Sacramento/Trinity model.
 
-    Returns:
-        None. Writes multiple preprocessed and derived records to
-        the shared DMS_SacTrn_ResSim_Pre-Process.dss file (and
-        related shared DSS files).
+    Fixes data types/units, creates constant reference records,
+    splices in Redding met data for Lewiston, computes reservoir
+    outflows and TCD flow, enforces minimum flows to avoid
+    zero-flow issues in W2, and corrects a known Pit River timestamp
+    offset.
+
+    Parameters
+    ----------
+    currentAlternative : object
+        The alternative object being computed. Must support
+        `addComputeMessage()` and `getTimeStep()` for logging and
+        retrieving the balance period.
+    computeOptions : object
+        The compute options/settings object. Must support
+        `getRunDirectory()` to locate the current run.
+
+    Returns
+    -------
+    bool
+        True once preprocessing has completed. Writes multiple
+        preprocessed and derived records to the shared
+        `DMS_SacTrn_ResSim_Pre-Process.dss` file (and related shared
+        DSS files).
+
+    Notes
+    -----
+    Order-dependent steps: `splice_lewiston_met_data` and
+    `compute_5Res_outflows` must run before `W2_shasta_TCD_flow`,
+    since the latter depends on outputs of the former.
     """
     rtw = computeOptions.getRunTimeWindow()
     
@@ -1080,24 +1151,40 @@ def preprocess_W2_5Res(currentAlternative, computeOptions):
 def preprocess_ResSim_5Res(currentAlternative, computeOptions):
     """
     Preprocess DMS hydrology and meteorology data for the ResSim
-    5-reservoir Sacramento/Trinity model: fixes data types/units,
-    standardizes water temperature boundary conditions to Celsius,
-    creates constant reference records, generates a repeating
-    annual temperature pattern, splices in Redding met data for
-    Lewiston, computes reservoir outflows/plotting records/river
-    balance flows, and derives an air temperature lapse and several
-    relative humidity / dew point records.dss_file = computeOptions.getDssFilename()
-    Args:
-        currentAlternative: The alternative object being computed.
-            Must support addComputeMessage() and getTimeStep() for
-            logging and retrieving the balance period.
-        computeOptions: The compute options/settings object. Must
-            support getDssFilename() and getRunDirectory().
+    5-reservoir Sacramento/Trinity model.
 
-    Returns:
-        None. Writes multiple preprocessed and derived records to
-        the shared DMS_SacTrn_ResSim_Pre-Process.dss file (and
-        related shared DSS files).
+    Fixes data types/units, standardizes water temperature boundary
+    conditions to Celsius, creates constant reference records,
+    generates a repeating annual temperature pattern, splices in
+    Redding met data for Lewiston, computes reservoir
+    outflows/plotting records/river balance flows, and derives an
+    air temperature lapse and several relative humidity / dew point
+    records.
+
+    Parameters
+    ----------
+    currentAlternative : object
+        The alternative object being computed. Must support
+        `addComputeMessage()` and `getTimeStep()` for logging and
+        retrieving the balance period.
+    computeOptions : object
+        The compute options/settings object. Must support
+        `getDssFilename()` and `getRunDirectory()`.
+
+    Returns
+    -------
+    bool
+        True once preprocessing has completed. Writes multiple
+        preprocessed and derived records to the shared
+        `DMS_SacTrn_ResSim_Pre-Process.dss` file (and related shared
+        DSS files).
+
+    Notes
+    -----
+    Order-dependent steps: met splicing, outflow computation, and
+    plotting records must run before `compute_river_balance_flows`,
+    since the latter depends on the Whiskeytown total dam flow record
+    created in `compute_plotting_records`.
     """
     rtw = computeOptions.getRunTimeWindow()
     
@@ -1171,4 +1258,4 @@ def preprocess_ResSim_5Res(currentAlternative, computeOptions):
                       "/MR Sac.-Clear Cr. to Sac R./KRDD-/RELHUM-FROM-AT-DP//1Hour/235.40.53.1.1-DERIVED/")  # Dewpoint from lapse + RH
    
     # Signal success to WAT
-    return True                                               
+    return True

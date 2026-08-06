@@ -1,4 +1,3 @@
-
 """
 OutputLink_W2-Whiskeytown-Downstream_SacTrn
 ===========================================
@@ -69,15 +68,19 @@ def fixFpartToInput(inputpath, outpath):
     from, rather than whatever F-part was assigned when the output
     path was created.
 
-    Args:
-        inputpath (str): DSS path string for the input location.
-            Its F-part (index 6 after splitting on '/') is used.
-        outpath (str): The DSS output path whose F-part should be
-            replaced.
+    Parameters
+    ----------
+    inputpath : str
+        DSS path string for the input location. Its F-part (index 6
+        after splitting on `'/'`) is used.
+    outpath : str
+        The DSS output path whose F-part should be replaced.
 
-    Returns:
-        str: The output DSS path with its F-part replaced by the
-            F-part from inputpath.
+    Returns
+    -------
+    str
+        The output DSS path with its F-part replaced by the F-part
+        from `inputpath`.
     """
     # get F-part from input locations
     location_fpart = inputpath.split('/')[6]  # Extract F-part from the input path
@@ -89,8 +92,9 @@ def fixFpartToInput(inputpath, outpath):
 
 def computeAlternative(currentAlternative, computeOptions):
     """
-    Compute a scripting alternative that performs two independent
-    operations for the Sacramento River system:
+    Compute a scripting alternative for the Sacramento River system.
+
+    Performs two independent operations:
 
     1. Keswick flow balancing: sums the first two configured input
        locations (converting units to cfs as needed) and writes the
@@ -101,43 +105,54 @@ def computeAlternative(currentAlternative, computeOptions):
        under its own F-part and under the input model's F-part (for
        easier plotting alongside the source model).
 
+    Parameters
+    ----------
+    currentAlternative : object
+        The alternative object being computed. Must support
+        `addComputeMessage()`, `getInputDataLocations()`,
+        `getOutputDataLocations()`, `createOutputTimeSeries()`, and
+        `loadTimeSeries()` for logging and resolving linked data
+        locations.
+    computeOptions : object
+        The compute options/settings object. Must support
+        `getDssFilename()` and `getRunTimeWindow()` to provide the
+        target DSS file and the time window to compute over.
+
+    Returns
+    -------
+    bool
+        True once both the flow balancing and tunnel heating steps
+        have completed and their results have been written to DSS.
+
+    Raises
+    ------
+    SystemExit
+        Calls `sys.exit(1)` instead of returning if fewer than 2
+        input data locations are found.
+
+    Notes
+    -----
     Workflow:
-      1. Logs a compute status message to the alternative.
-      2. Validates that at least 2 input data locations are
-         configured; exits if fewer than 2 are found.
-      3. Reads the first input location as the base time series.
-      4. Determines the base series' units and computes a
-         cms-to-cfs conversion factor if needed.
-      5. For the second input location, reads its time series,
-         converts units if needed, and adds it value-by-value to
-         the base series, substituting MISSING_DOUBLE for any
-         index where a value is unavailable.
-      6. Writes the combined flow time series to the first output
-         location in cfs.
-      7. Re-reads the input data locations and selects the last one
-         (Spring Creek) as the source for the tunnel heating step.
-      8. Adds a fixed heating offset to every value in that series.
-      9. Writes the heated series to the second output location,
-         then writes a second copy under the F-part of the original
-         input model, so both the model output and a
-         plotting-friendly, F-part-matched copy exist in DSS.
 
-    Args:
-        currentAlternative: The alternative object being computed.
-            Must support addComputeMessage(), getInputDataLocations(),
-            getOutputDataLocations(), createOutputTimeSeries(), and
-            loadTimeSeries() for logging and resolving linked data
-            locations.
-        computeOptions: The compute options/settings object. Must
-            support getDssFilename() and getRunTimeWindow() to
-            provide the target DSS file and the time window to
-            compute over.
-
-    Returns:
-        bool: True once both the flow balancing and tunnel heating
-            steps have completed and their results have been
-            written to DSS. Calls sys.exit(1) instead of returning
-            if fewer than 2 input data locations are found.
+    1. Logs a compute status message to the alternative.
+    2. Validates that at least 2 input data locations are
+       configured; exits if fewer than 2 are found.
+    3. Reads the first input location as the base time series.
+    4. Determines the base series' units and computes a cms-to-cfs
+       conversion factor if needed.
+    5. For the second input location, reads its time series,
+       converts units if needed, and adds it value-by-value to the
+       base series, substituting `MISSING_DOUBLE` for any index
+       where a value is unavailable.
+    6. Writes the combined flow time series to the first output
+       location in cfs.
+    7. Re-reads the input data locations and selects the last one
+       (Spring Creek) as the source for the tunnel heating step.
+    8. Adds a fixed heating offset to every value in that series.
+    9. Writes the heated series to the second output location, then
+       writes a second copy under the F-part of the original input
+       model, so both the model output and a plotting-friendly,
+       F-part-matched copy exist in DSS.
     """
     currentAlternative.addComputeMessage("Computing ScriptingAlternative:" + currentAlternative.getName() )
     

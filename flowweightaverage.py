@@ -6,7 +6,7 @@ DSS pathnames and to compute flow-weighted average (FWA) temperatures
 over a specified time window. It is used within HEC-WAT / WTMP workflows
 and relies on HEC-DSS APIs available in Jython.
 
-**What’s included**
+**What's included**
 - Pair-organization for locations linked to prior models.
 - Unit-normalization helpers for flow (CFS/CMS) and temperature (C/F).
 - Two FWA implementations:
@@ -41,19 +41,27 @@ def organizeLocations(currentAlternative, locations):
     followed by its matching temperature location. Each location is
     resolved to its actual DSS path and has its F-part corrected.
 
-    Args:
-        currentAlternative: The alternative object being computed.
-            Must support addComputeMessage() and loadTimeSeries()
-            for logging and resolving linked data locations.
-        locations (list): Flat list of input data locations,
-            alternating flow and temperature entries. Must contain
-            an even number of entries.
+    Parameters
+    ----------
+    currentAlternative : object
+        The alternative object being computed. Must support
+        `addComputeMessage()` and `loadTimeSeries()` for logging and
+        resolving linked data locations.
+    locations : list
+        Flat list of input data locations, alternating flow and
+        temperature entries. Must contain an even number of entries.
 
-    Returns:
-        list of list: A list of [flow_path, temp_path] pairs, one
-            per two input locations, in the order they were given.
-            Exits the process (sys.exit(1)) if an odd number of
-            locations is provided.
+    Returns
+    -------
+    list of list
+        A list of `[flow_path, temp_path]` pairs, one per two input
+        locations, in the order they were given.
+
+    Raises
+    ------
+    SystemExit
+        Calls `sys.exit(1)` if an odd number of locations is
+        provided.
     """
     locations_list = []
     # a flow/temperature pairing requires an even number of locations
@@ -75,38 +83,30 @@ def organizeLocations(currentAlternative, locations):
     return locations_list 
 
 
-def flow_in_cfs(units, flows):
+def flow_in_cfs(units,flows):
     """
-    Normalize flow values to CFS.
+    Convert a list of flow values to cubic feet per second (cfs), if
+    not already in that unit.
 
     Parameters
     ----------
     units : str
-        Units string from DSS (e.g., 'CFS', 'CMS').
+        The unit label of the input flow values. Recognized values
+        (case-insensitive) are `'cfs'` and `'cms'`.
     flows : list of float
-        Flow values in the given units.
+        Flow values to convert.
 
     Returns
     -------
     list of float
-        Flow values converted to CFS (or unchanged if already in CFS).
+        Flow values in cfs. If `units` is already `'cfs'`, the
+        original list is returned unchanged.
 
-def flow_in_cfs(units,flows):
-    """
-    Convert a list of flow values to cubic feet per second (cfs),
-    if not already in that unit.
-
-    Args:
-        units (str): The unit label of the input flow values.
-            Recognized values (case-insensitive) are 'cfs' and
-            'cms'.
-        flows (list of float): Flow values to convert.
-
-    Returns:
-        list of float: Flow values in cfs. If units is already
-            'cfs', the original list is returned unchanged. If
-            units is unrecognized, the process exits
-            (sys.exit(-1)) after printing an error.
+    Raises
+    ------
+    SystemExit
+        If `units` is unrecognized, prints an error and calls
+        `sys.exit(-1)`.
     """
     if units.lower()=='cfs':
         return flows
@@ -130,17 +130,26 @@ def temperature_in_C(units,temps):
     Convert a list of temperature values to degrees Celsius, if not
     already in that unit.
 
-    Args:
-        units (str): The unit label of the input temperature
-            values. Recognized values (case-insensitive) are 'c',
-            'deg c', 'f', and 'deg f'.
-        temps (list of float): Temperature values to convert.
+    Parameters
+    ----------
+    units : str
+        The unit label of the input temperature values. Recognized
+        values (case-insensitive) are `'c'`, `'deg c'`, `'f'`, and
+        `'deg f'`.
+    temps : list of float
+        Temperature values to convert.
 
-    Returns:
-        list of float: Temperature values in degrees Celsius. If
-            units is already Celsius, the original list is returned
-            unchanged. If units is unrecognized, the process exits
-            (sys.exit(-1)) after printing an error.
+    Returns
+    -------
+    list of float
+        Temperature values in degrees Celsius. If `units` is already
+        Celsius, the original list is returned unchanged.
+
+    Raises
+    ------
+    SystemExit
+        If `units` is unrecognized, prints an error and calls
+        `sys.exit(-1)`.
     """
     if units.lower()=='c' or units.lower()=='deg c':
         return temps
@@ -163,100 +172,94 @@ def temperature_in_C(units,temps):
 def FWA2(currentAlt, dssFile, timewindow, DSSPaths_list, outputname, cfs_limit=None, bad_data_fill_tempC=None, last_override=False):
     """
     Compute a flow-weighted average temperature across multiple
-    flow/temperature record pairs, with optional filtering of low
-    flows and optional override behavior using the last record
-    pair's values directly when its flow exceeds the cfs_limit.
+    flow/temperature record pairs.
 
-    This is a rewritten version of FWA, intended to fix odd
-    behavior observed in the original implementation.
+    This is a rewritten version of `FWA`, intended to fix odd
+    behavior observed in the original implementation. Supports
+    optional filtering of low flows and optional override behavior
+    using the last record pair's values directly when its flow
+    exceeds `cfs_limit`.
 
+    Parameters
+    ----------
+    currentAlt : object
+        The alternative object being computed. Must support
+        `addComputeMessage()` for logging.
+    dssFile : str
+        Path to the DSS file to read from and write to.
+    timewindow : object
+        The run time window object, used to get the start and end
+        time strings for reading input data.
+    DSSPaths_list : list of list
+        A list of `[flow_path, temp_path]` pairs, as produced by
+        `organizeLocations`.
+    outputname : str
+        DSS path to write the resulting flow-weighted average
+        temperature record to.
+    cfs_limit : float, optional
+        Minimum flow (in cfs) required for a flow/temperature pair to
+        be included in the average. Defaults to 0.0 if not provided.
+    bad_data_fill_tempC : float, optional
+        Value to use at timesteps where no valid flow/temperature
+        pairs are available. Defaults to `UNDEFINED_DOUBLE` if not
+        provided.
+    last_override : bool, optional
+        If True, use the last record pair's own temperature value
+        directly (instead of the weighted average) at timesteps where
+        its flow exceeds `cfs_limit` and its temperature is valid.
+        Defaults to False.
+
+    Returns
+    -------
+    int
+        Always returns 0 on completion.
+
+    Notes
+    -----
     Workflow:
-      1. Opens the DSS file and reads each flow/temperature pair
-         from DSSPaths_list.
-      2. Converts each pair's units to cfs and Celsius.
-      3. For each timestep, if both flow and temperature pass data
-         quality checks (not NaN, flow above cfs_limit and below a
-         sanity ceiling, temperature within 0-80 C), accumulates
-         flow and flow*temperature totals to compute the weighted
-         average.
-      4. After processing all pairs, computes the flow-weighted
-         average temperature at each timestep, using fill_value
-         where no valid pairs contributed.
-      5. If last_override is True and the last record pair was read
-         successfully, overrides the weighted average at any
-         timestep where the last pair's own flow/temperature values
-         pass the same data quality checks, using its temperature
-         value directly instead of the weighted average.
-      6. Writes the resulting time series to outputname in dssFile,
-         reusing the last temperature record's container.
 
-    NOTE: If reading the very first record pair (dspi == 0) fails
-    inside the try/except block, nrecs and temp_type will not have
-    been set, and the function will raise a NameError further down.
-    This edge case is not currently handled.
+    1. Opens the DSS file and reads each flow/temperature pair from
+       `DSSPaths_list`.
+    2. Converts each pair's units to cfs and Celsius.
+    3. For each timestep, if both flow and temperature pass data
+       quality checks (not NaN, flow above `cfs_limit` and below a
+       sanity ceiling of `9.0e6`, temperature within 0-80 C),
+       accumulates flow and flow*temperature totals to compute the
+       weighted average.
+    4. After processing all pairs, computes the flow-weighted average
+       temperature at each timestep, using a fill value where no
+       valid pairs contributed.
+    5. If `last_override` is True and the last record pair was read
+       successfully, overrides the weighted average at any timestep
+       where the last pair's own flow/temperature values pass the
+       same data quality checks, using its temperature value directly
+       instead of the weighted average.
+    6. Writes the resulting time series to `outputname` in `dssFile`,
+       reusing the last temperature record's container.
 
-    Args:
-        currentAlt: The alternative object being computed. Must
-            support addComputeMessage() for logging.
-        dssFile (str): Path to the DSS file to read from and write
-            to.
-        timewindow: The run time window object, used to get the
-            start and end time strings for reading input data.
-        DSSPaths_list (list of list): A list of [flow_path,
-            temp_path] pairs, as produced by organizeLocations.
-        outputname (str): DSS path to write the resulting
-            flow-weighted average temperature record to.
-        cfs_limit (float, optional): Minimum flow (in cfs) required
-            for a flow/temperature pair to be included in the
-            average. Defaults to 0.0 if not provided.
-        bad_data_fill_tempC (float, optional): Value to use at
-            timesteps where no valid flow/temperature pairs are
-            available. Defaults to UNDEFINED_DOUBLE if not provided.
-        last_override (bool, optional): If True, use the last
-            record pair's own temperature value directly (instead
-            of the weighted average) at timesteps where its flow
-            exceeds cfs_limit and its temperature is valid. Defaults
-            to False.
+    **Known issues (left unchanged per instructions):**
 
-    Returns:
-        int: Always returns 0 on completion.
+    - If reading the very first record pair (`dspi == 0`) fails inside
+      the `try/except` block, `nrecs` and `temp_type` will not have
+      been set, and the function will raise a `NameError` further
+      down when they are referenced.
+    - `flow_limit` and `fill_value` are referenced in the loop bodies
+      but are never assigned anywhere in this function - they appear
+      to be intended to come from `cfs_limit` and
+      `bad_data_fill_tempC` respectively (per the parameter
+      docstrings above) but that assignment is missing from the
+      source. As written, this function will raise a `NameError`
+      when it reaches the first data-quality check.
+    - `n_pairs`, `flow_total`, and `flowtemp_total` are appended to
+      (`n_pairs.append(0)`, etc.) under the `if dspi==0` branch inside
+      the per-timestep loop, but these lists themselves are never
+      initialized as empty lists beforehand - another likely
+      `NameError` source.
     """
     starttime_str = timewindow.getStartTimeString()
     endtime_str = timewindow.getEndTimeString()
     currentAlt.addComputeMessage('Looking from {0} to {1}'.format(starttime_str, endtime_str))
     dssFm = HecDss.open(dssFile)
-
-    Parameters
-    ----------
-    currentAlt : object
-        Alternative providing start/end times and logging.
-    dssFile : str
-        Path to DSS file for reading and writing.
-    timewindow : object
-        Provides `getStartTimeString()` / `getEndTimeString()` (HEC format).
-    DSSPaths_list : list of [str, str]
-        List of DSS path pairs: `[flow_path, temp_path]`.
-    outputname : str
-        Destination DSS pathname to write the FWA temperature series.
-    cfs_limit : float or None, optional
-        Minimum flow threshold (CFS); flows below are excluded from weighting.
-    bad_data_fill_tempC : float or None, optional
-        Fill value (°C) used when no valid pairs exist at a timestep; if None, uses `UNDEFINED_DOUBLE`.
-    last_override : bool, optional
-        If True and the last record is valid, override FWA at each index with raw temp
-        when the concurrent flow/temperature pass all filters.
-
-    Returns
-    -------
-    int
-        Returns 0 after writing the output series.
-
-    Notes
-    -----
-    - Enforces multiple data checks: non-NaN values, flow within [cfs_limit, 9e6],
-      and temperature within [0, 80] °C.
-    - Uses temperature type from the first temp record for output `tsc.type`.
-    """
 
     # Get the times for the analysis
     starttime_str = timewindow.getStartTimeString()  # start time (HEC string)
@@ -357,87 +360,70 @@ def FWA(currentAlt, dssFile, timewindow, DSSPaths_list, outputname, cfs_limit=No
     flow/temperature record pairs.
 
     This is the original flow-weighted average implementation.
-    Superseded by FWA2, which was written to address inconsistent
+    Superseded by `FWA2`, which was written to address inconsistent
     behavior observed in this version, but this function is kept
     for reference/backward compatibility.
 
+    Parameters
+    ----------
+    currentAlt : object
+        The alternative object being computed. Must support
+        `addComputeMessage()` for logging.
+    dssFile : str
+        Path to the DSS file to read from and write to.
+    timewindow : object
+        The run time window object, used to get the start and end
+        time strings for reading input data.
+    DSSPaths_list : list of list
+        A list of `[flow_path, temp_path]` pairs, as produced by
+        `organizeLocations`.
+    outputname : str
+        DSS path to write the resulting flow-weighted average
+        temperature record to.
+    cfs_limit : float, optional
+        Minimum flow (in cfs) required for a flow value to be
+        included; flows below this limit are zeroed out rather than
+        excluded. If None, no filtering is applied.
+
+    Returns
+    -------
+    int
+        Always returns 0 on completion.
+
+    Notes
+    -----
     Workflow:
-      1. Opens the DSS file and reads each flow/temperature pair
-         from DSSPaths_list into a per-pair dictionary (dss_data).
-      2. Converts flow to cfs if needed, and zeroes out any flow
-         values below cfs_limit.
-      3. Computes flow*temperature for each pair at each timestep.
-      4. Sums flow across all pairs at each timestep to get total
-         flow.
-      5. Sums flow*temperature across all pairs at each timestep
-         (skipping NaN contributions) to get total weighted
-         temperature.
-      6. Divides total weighted temperature by total flow at each
-         timestep to get the flow-weighted average, using
-         UNDEFINED_DOUBLE where total flow is zero.
-      7. Writes the resulting time series to outputname in dssFile.
 
-    NOTE: This function relies on dss_data.keys()[0] to pick an
-    arbitrary reference pair, which assumes a stable key/insertion
-    order for the dss_data dictionary. Depending on the Python/
-    Jython version in use, this may not be guaranteed.
+    1. Opens the DSS file and reads each flow/temperature pair from
+       `DSSPaths_list` into a per-pair dictionary (`dss_data`).
+    2. Converts flow to cfs if needed, and zeroes out any flow values
+       below `cfs_limit`.
+    3. Computes flow*temperature for each pair at each timestep.
+    4. Sums flow across all pairs at each timestep to get total flow.
+    5. Sums flow*temperature across all pairs at each timestep
+       (skipping NaN contributions) to get total weighted temperature.
+    6. Divides total weighted temperature by total flow at each
+       timestep to get the flow-weighted average, using
+       `UNDEFINED_DOUBLE` where total flow is zero.
+    7. Writes the resulting time series to `outputname` in `dssFile`.
 
-    Args:
-        currentAlt: The alternative object being computed. Must
-            support addComputeMessage() for logging.
-        dssFile (str): Path to the DSS file to read from and write
-            to.
-        timewindow: The run time window object, used to get the
-            start and end time strings for reading input data.
-        DSSPaths_list (list of list): A list of [flow_path,
-            temp_path] pairs, as produced by organizeLocations.
-        outputname (str): DSS path to write the resulting
-            flow-weighted average temperature record to.
-        cfs_limit (float, optional): Minimum flow (in cfs) required
-            for a flow value to be included; flows below this limit
-            are zeroed out rather than excluded. If None, no
-            filtering is applied.
+    **Known issues (left unchanged per instructions):**
 
-    Returns:
-        int: Always returns 0 on completion.
+    - This function relies on `dss_data.keys()[0]` to pick an
+      arbitrary reference pair, which assumes a stable key/insertion
+      order for the `dss_data` dictionary. Depending on the
+      Python/Jython version in use, this may not be guaranteed.
+    - `hecstarttimes` is referenced when building the output
+      `TimeSeriesContainer` but is never assigned anywhere in this
+      function - this appears to be a leftover reference to a
+      variable defined elsewhere, and will raise a `NameError` when
+      this function is called.
     """
     starttime_str = timewindow.getStartTimeString()
     endtime_str = timewindow.getEndTimeString()
     currentAlt.addComputeMessage('Looking from {0} to {1}'.format(starttime_str, endtime_str))
     dssFm = HecDss.open(dssFile)
     dss_data = {}
-    # Read each flow/temperature pair into a per-pair data dictionary 
-    # for each flow/temperature record pair, read the data and store it by pair index
-    for dspi, dsspaths in enumerate(DSSPaths_list):
-        flow_dss_path = dsspaths[0]
-        currentAlt.addComputeMessage(str(flow_dss_path))
-        flowTS = dssFm.read(flow_dss_path, starttime_str, endtime_str, False)
-
-    Parameters
-    ----------
-    currentAlt : object
-        Alternative providing window times and logging.
-    dssFile : str
-        Path to DSS file for reading and writing.
-    timewindow : object
-        Provides `getStartTimeString()` / `getEndTimeString()` (HEC format).
-    DSSPaths_list : list of [str, str]
-        List of DSS path pairs: `[flow_path, temp_path]`.
-    outputname : str
-        Destination DSS pathname to write the FWA temperature series.
-    cfs_limit : float or None, optional
-        Minimum flow threshold (CFS); flows below are set to zero.
-
-    Returns
-    -------
-    int
-        Returns 0 after writing the output series.
-
-    Notes
-    -----
-    - Converts CMS to CFS when needed and sets sub-threshold flows to zero.
-    - Aggregates per-record flow and flow*temp, then computes FWA.
-    """
     
     # Get the time window of the analysis
     starttime_str = timewindow.getStartTimeString()  # window start string
@@ -556,5 +542,3 @@ def FWA(currentAlt, dssFile, timewindow, DSSPaths_list, outputname, cfs_limit=No
     dssFm.close()
     currentAlt.addComputeMessage("Number of Written values: {0}".format(len(FW_Avg_vals)))
     return 0
-   
-           

@@ -1,11 +1,26 @@
-import sys
-print(sys.path)
-from hec.heclib.dss import HecDss
+"""
+Post-Process_ResSim_SacTrnNS
+=============================
 
-import DSS_Tools
-reload(DSS_Tools)
-import flowweightaverage
-reload(flowweightaverage)
+Compute a WAT Scripting Alternative that applies tunnel heating adjustments
+to Clear Creek and Spring Creek tunnel temperature data, then copies target
+temperature records into the simulation DSS file under each linked upstream
+model's F-part for easier reporting.
+
+Notes
+-----
+- **Environment:** Jython (Python 2.7 semantics) within HEC-WAT.
+- **Dependencies:** `hec.heclib.dss`, `DSS_Tools`, `flowweightaverage`.
+"""
+
+import sys                       # Standard library: used here only to print sys.path for diagnostics
+print(sys.path)                  # Diagnostic: show module search path at script load time
+from hec.heclib.dss import HecDss  # HEC-DSS: open/read/write DSS files (imported for completeness; not directly used)
+
+import DSS_Tools                 # Local module: DSS path resolution, F-part fixing, add_DSS_Data, copy_dss_ts
+reload(DSS_Tools)                # Jython: ensure latest version is loaded
+import flowweightaverage         # Local module: flow-weighted average utilities (imported but not directly used here)
+reload(flowweightaverage)        # Reload to ensure latest version
 
 ##
 #
@@ -51,16 +66,19 @@ def fixFpartToInput(locations_paths, outpath):
     rather than whatever default F-part was assigned when the output
     path was created.
 
-    Args:
-        locations_paths (list of str): DSS path strings for the
-            input locations. Only the first entry's F-part
-            (index 6 after splitting on '/') is used.
-        outpath (str): The DSS output path whose F-part should be
-            replaced.
+    Parameters
+    ----------
+    locations_paths : list of str
+        DSS path strings for the input locations. Only the first
+        entry's F-part (index 6 after splitting on `'/'`) is used.
+    outpath : str
+        The DSS output path whose F-part should be replaced.
 
-    Returns:
-        str: The output DSS path with its F-part replaced by the
-            F-part from locations_paths[0].
+    Returns
+    -------
+    str
+        The output DSS path with its F-part replaced by the F-part
+        from `locations_paths[0]`.
     """
     # get F-part from input locations
     location_fpart = locations_paths[0].split('/')[6]
@@ -76,19 +94,22 @@ def getOutputPaths(locations_paths,currentAlternative):
     For every output data location configured on the alternative,
     this creates the corresponding output time series path and then
     rewrites its F-part to match the input locations, via
-    fixFpartToInput.
+    `fixFpartToInput`.
 
-    Args:
-        locations_paths (list of str): DSS path strings for the
-            input locations, used to source the F-part to apply.
-        currentAlternative: The alternative object being computed.
-            Must support getOutputDataLocations() and
-            createOutputTimeSeries().
+    Parameters
+    ----------
+    locations_paths : list of str
+        DSS path strings for the input locations, used to source the
+        F-part to apply.
+    currentAlternative : object
+        The alternative object being computed. Must support
+        `getOutputDataLocations()` and `createOutputTimeSeries()`.
 
-    Returns:
-        list of str: DSS output paths, one per output data
-            location, each with its F-part fixed to match the
-            input locations.
+    Returns
+    -------
+    list of str
+        DSS output paths, one per output data location, each with
+        its F-part fixed to match the input locations.
     """
     outputlocations_obs = currentAlternative.getOutputDataLocations()    
     outputPaths = []
@@ -99,50 +120,57 @@ def getOutputPaths(locations_paths,currentAlternative):
     
 def computeAlternative(currentAlternative, computeOptions):
     """
-    Compute a scripting alternative that applies tunnel heating
-    adjustments to Clear Creek and Spring Creek tunnel temperature
-    data, then copies target temperature records into the
-    simulation DSS file under each linked upstream model's F-part
-    for easier reporting.
+    Compute a scripting alternative for tunnel heating and
+    cross-model target temperature copying.
 
+    Applies tunnel heating adjustments to Clear Creek and Spring
+    Creek tunnel temperature data, then copies target temperature
+    records into the simulation DSS file under each linked upstream
+    model's F-part for easier reporting.
+
+    Parameters
+    ----------
+    currentAlternative : object
+        The alternative object being computed. Must support
+        `addComputeMessage()`, `getInputDataLocations()`,
+        `getOutputDataLocations()`, and `createOutputTimeSeries()`
+        for logging and resolving linked data locations.
+    computeOptions : object
+        The compute options/settings object. Must support
+        `getDssFilename()` and `getRunTimeWindow()` to provide the
+        target DSS file and the time window to compute over.
+
+    Returns
+    -------
+    bool
+        True once the tunnel heating calculations have been applied
+        and the target temperature records have been copied under
+        each linked model's F-part.
+
+    Notes
+    -----
     Workflow:
-      1. Logs a compute status message to the alternative.
-      2. Resolves DSS paths for all configured input locations
-         (input_names).
-      3. Resolves the F-part associated with the ResSim-linked
-         record (ResSim_linked_rec). (Note: ressim_copy_paths is
-         currently hardcoded and not used later in this function -
-         see inline note.)
-      4. Builds the list of output DSS paths, each tagged with the
-         F-part from the input locations (via getOutputPaths).
-      5. Retrieves the DSS filename and run time window for this
-         compute.
-      6. Applies the Clear Creek tunnel heating calculation using
-         the first two input paths, writing to the first output
-         path.
-      7. Applies the Spring Creek tunnel heating calculation using
-         the remaining input paths, writing to the second output
-         path.
-      8. Organizes the target temperature locations (copy_rec) and,
-         for each one, copies it into the simulation DSS file once
-         per linked upstream model record in model_recs, tagged
-         with that model's F-part, so the target temperature is
-         available under each model's naming convention.
 
-    Args:
-        currentAlternative: The alternative object being computed.
-            Must support addComputeMessage(), getInputDataLocations(),
-            getOutputDataLocations(), and createOutputTimeSeries()
-            for logging and resolving linked data locations.
-        computeOptions: The compute options/settings object. Must
-            support getDssFilename() and getRunTimeWindow() to
-            provide the target DSS file and the time window to
-            compute over.
-
-    Returns:
-        bool: True once the tunnel heating calculations have been
-            applied and the target temperature records have been
-            copied under each linked model's F-part.
+    1. Logs a compute status message to the alternative.
+    2. Resolves DSS paths for all configured input locations
+       (`input_names`).
+    3. Resolves the F-part associated with the ResSim-linked record
+       (`ResSim_linked_rec`). (Note: `ressim_copy_paths` is
+       currently hardcoded and not used later in this function -
+       see inline note.)
+    4. Builds the list of output DSS paths, each tagged with the
+       F-part from the input locations (via `getOutputPaths`).
+    5. Retrieves the DSS filename and run time window for this
+       compute.
+    6. Applies the Clear Creek tunnel heating calculation using the
+       first two input paths, writing to the first output path.
+    7. Applies the Spring Creek tunnel heating calculation using the
+       remaining input paths, writing to the second output path.
+    8. Organizes the target temperature locations (`copy_rec`) and,
+       for each one, copies it into the simulation DSS file once per
+       linked upstream model record in `model_recs`, tagged with
+       that model's F-part, so the target temperature is available
+       under each model's naming convention.
     """
     currentAlternative.addComputeMessage("Computing ScriptingAlternative:" + currentAlternative.getName() )
     locations_obj = currentAlternative.getInputDataLocations()
@@ -207,7 +235,3 @@ def computeAlternative(currentAlternative, computeOptions):
                                   dss_file_alt_outpath=dss_file)
  
     return True
-
-
-            
-
