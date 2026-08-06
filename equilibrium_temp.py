@@ -1,8 +1,18 @@
-import datetime as dt
-import math
+"""
+Equilibrium Temperature Utilities
 
-import tz_offset
-reload(tz_offset)
+This module implements shortwave/longwave radiation terms and iterative
+root-finding routines (Newton–Raphson and bisection) to estimate the
+water surface equilibrium temperature, adapted for Jython/Python use in
+HEC-WAT / WTMP workflows.
+
+"""
+
+import datetime as dt   # Python datetime utilities for timestamps and arithmetic
+import math             # Standard math library for trigonometric and exponential functions
+
+import tz_offset        # Module providing timezone/day offset used in DOY calculations
+reload(tz_offset)       # Reload to ensure the latest `tz_offset.days` value is used
 
 # TODO: hardcoded lat/lon sould be variable
 
@@ -67,7 +77,9 @@ def bisection_solve(fTe_min, a, b, H1, uw, Ta_in, td, sat_vp_ta, tol=1e-2, max_i
     iter_count = 0
     # repeatedly halve the search interval until it is smaller than the tolerance
     while (b - a) / 2.0 > tol:
-        c = (a + b) / 2.0
+        # midpoint
+        c = (a + b) / 2.0  
+        
         # protect against divide-by-zero during iteration
         if (c-td) == 0.0:
             c += tol
@@ -75,22 +87,25 @@ def bisection_solve(fTe_min, a, b, H1, uw, Ta_in, td, sat_vp_ta, tol=1e-2, max_i
 
         # if the midpoint is (close enough to) a root, return it immediately
         if fc == 0 or (b - a) / 2.0 < tol:
-            return c  # Root found
-        #print('BC:',a,b,c)
+            return c  # Root found within tolerance
+
+        # Increment the iteration counter
         iter_count += 1
         # if too many iterations have passed without converging, give up
         if iter_count > max_iter:
-            raise ValueError("bisection_solve: Maximum iterations exceeded")
+            raise ValueError("bisection_solve: Maximum iterations exceeded")  # fail safe
 
         # narrow the interval to whichever half still brackets the root
         if fa * fc < 0.0:
             b = c
             fb = fc
+        
         else:
             a = c
             fa = fc
 
-    return (a + b) / 2.0  # Returning the middle of the final interval
+    # Returning the middle of the final interval
+    return (a + b) / 2.0  
 
 
 def newton_raphson_solve(f, df, x0, H1, uw, Ta_in, Td, sat_vp_ta, tol=1e-2, max_iter=1000):
@@ -135,24 +150,25 @@ def newton_raphson_solve(f, df, x0, H1, uw, Ta_in, Td, sat_vp_ta, tol=1e-2, max_
     x_old = x0
     # iterate the Newton-Raphson update until convergence or max_iter is reached
     while iter_count < max_iter:
-        fx_old = f(x_old, H1, uw, Ta_in, Td, sat_vp_ta)
-        dfx_old = df(x_old, H1, uw, Ta_in, Td, sat_vp_ta)
+        # function value
+        fx_old = f(x_old, H1, uw, Ta_in, Td, sat_vp_ta)   
+        
+        # derivative value
+        dfx_old = df(x_old, H1, uw, Ta_in, Td, sat_vp_ta) 
 
         # a near-zero derivative would make the update step unstable/undefined
         if abs(dfx_old) < tol:
-            raise ValueError("Derivative near zero")
-
-        x_new = x_old - fx_old / dfx_old
-        #print('NR:',x0,x_new,x_old,fx_old,dfx_old)
+            raise ValueError("Derivative near zero")  # halt to avoid blow-up
 
         # if the estimate has stopped changing meaningfully, treat it as converged
         if abs(x_new - x_old) < tol:
             return x_new  # Root found
 
-        x_old = x_new
+        # Advance the iteration and the counter
+        x_old = x_new     
         iter_count += 1
 
-    # print(x0, x_new, x_old, ' Ta_in: ', Ta_in, ' Td: ', Td, ' sat_vp_ta: ', sat_vp_ta)
+    # Raise an error as this point should only be reached due to nonconvergence
     raise ValueError("newton_raphson_solve: Maximum iterations exceeded")
 
 
@@ -198,8 +214,9 @@ def solar_alt_angle(tin):
     longitude = 121.8
     time_zone_longitude = 120.
 
-    delta = (longitude - time_zone_longitude) / 15.
-    doy = get_decimal_day_of_year(tin)
+    # Calculate the offset values
+    delta = (longitude - time_zone_longitude) / 15.  # time-zone hour offset
+    doy = get_decimal_day_of_year(tin)               # decimal day-of-year
 
     solar_decl = 0.4092 * math.cos(2. * math.pi / 365. * (172. - doy))
     # two terms of the standard solar altitude formula, combining
@@ -240,23 +257,31 @@ def sw_water_reflectance(tin, cloud_in):
     alt_angle = solar_alt_angle(tin)
     # if the sun is below the horizon, treat all shortwave radiation as reflected (none absorbed)
     if alt_angle <= 0.:
-        return 1.
+        return 1.  # at/below horizon: full reflection
+    
     else:
         # select the empirical reflectance coefficients based on the cloud cover band
         if cloud_in > 0.95:
             acoef = 0.33
             bcoef = -0.45
+    
         elif cloud_in > 0.55:
             acoef = 0.95
             bcoef = -0.75
+        
         elif cloud_in > 0.05:
             acoef = 2.20
             bcoef = -0.97
+        
         else:
             acoef = 1.18
             bcoef = -0.77
+
+        # Empirical power-law reflectance limited to 1.0
         water_sfc_reflectance = acoef * alt_angle ** bcoef
         water_sfc_reflectance = min(water_sfc_reflectance, 1.)
+        
+        # Return to the calling function
         return water_sfc_reflectance
 
 
@@ -342,9 +367,11 @@ def fTe(Te, H1, uw, Ta_in, Td, sat_vp_ta):
             equals zero (or, for fTe_min, where Te equals fTe(Te)).
     """
     '''Calculation of fTe with only Te-dependent terms'''
-    Lw = latent_heat_vaporization(Te)
-    sat_vp_te = sat_water_vapor_pres(Te)
-    beta = (sat_vp_te - sat_vp_ta) / (Te - Td)
+    
+    Lw = latent_heat_vaporization(Te)                     # latent heat (J/kg)
+    sat_vp_te = sat_water_vapor_pres(Te)                  # saturation VP at Te
+    beta = (sat_vp_te - sat_vp_ta) / (Te - Td)            # humidity slope term
+    
     return H1 - lw_emissivity_water * stefan_boltz_const * (Tk ** 4 + 4. * Tk ** 3 * Te + 6. * Tk ** 2 * Te ** 2) + \
         reference_density * Lw * (wind_a + wind_b * uw) * ((Cb * Ta_in + beta * Td) - (Cb + beta) * Te)
 
@@ -417,6 +444,7 @@ def fTe_min(Te, H1, uw, Ta_in, Td, sat_vp_ta):
     """
     return Te - fTe(Te, H1, uw, Ta_in, Td, sat_vp_ta)
 
+
 def fTe_abs(Te, H1, uw, Ta_in, Td, sat_vp_ta):
     """
     Compute the absolute value of the heat balance function fTe at
@@ -483,13 +511,16 @@ def equilibrium_temp(dtt1, at, cl, sr, ws, td, te_guess, type='nr'):
     sat_vp_ta = sat_water_vapor_pres(at)
     if type == 'nr':
         return newton_raphson_solve(fTe, dfTe_dTe, te_guess, H1, ws, at, td, sat_vp_ta, tol=1.0e-2, max_iter=1000)
+    
     elif type == 'bs':
         return bisection_solve(fTe_min, -30.0, 55.0, H1, ws, at, td, sat_vp_ta, tol=1.0e-2, max_iter=1000)
+    
     elif type == 'scipy':
        # Original equilibrium temp calc using scipy.optimize/minimize.  Can't use scipy in jython
        args = (H1, ws, at, td, sat_vp_ta)
        res = minimize(fTe_abs, x0=te_guess, args=args)
        return res.x
+    
     else:
         raise ValueError('equilibrium_temp() - calculation type not known:', type)
 
@@ -533,9 +564,9 @@ def calc_equilibrium_temp(dtt, at, cl, sr, td, ws):
         #print('Equilibrium step ',j,' of ',nt)
         # seed the solver with the air temperature on the first step, otherwise the previous solution
         if j == 0:
-            x0 = at[j]
+            x0 = at[j]    # initial guess from air temperature
         else:
-            x0 = te[j - 1]
+            x0 = te[j - 1]  # use last solution as next initial guess
 
         # The Newton-Raphson solver sometimes fails (when the derivitive goes big/non-linear) or produces a really bad
         # value.  We calulcate a secondary solution (which is sometimes inaccurate be over a degree, but usually is
@@ -545,17 +576,14 @@ def calc_equilibrium_temp(dtt, at, cl, sr, td, ws):
         te_bs = equilibrium_temp(dtt[j], at[j], cl[j], sr[j], ws[j], td[j], x0, type='bs')
         # try the faster Newton-Raphson solver first; fall back to bisection if it raises an error
         try:
-            te[j] = equilibrium_temp(dtt[j], at[j], cl[j], sr[j], ws[j], td[j], x0, type='nr')
+            te[j] = equilibrium_temp(dtt[j], at[j], cl[j], sr[j], ws[j], td[j], x0, type='nr')  # Newton–Raphson
         except:
-            #print(j, ' Newton-Raphson failure (convergence).  Using bisection-solution equilibrium temp')
-            te[j] = te_bs
-        #print(te[j],te_bs)
+            # print(j, ' Newton-Raphson failure (convergence).  Using bisection-solution equilibrium temp')
+            te[j] = te_bs  # fallback to bisection
 
         # even if Newton-Raphson succeeded, discard its result if it disagrees too much with bisection
         if abs(te[j] - te_bs) > 1.0:
-            #print('  Equilibrium step ',j,' of ',nt, 'Newton-Raphson failure (bad value).  Using bisection-solution equilibrium temp')
-            te[j] = te_bs
+            te[j] = te_bs  # replace with bisection when discrepancy is large
 
+    # Return the equilibrium temperature to the calling function
     return te
-
-

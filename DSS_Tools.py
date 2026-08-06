@@ -1,20 +1,13 @@
-#version 2.0
-#modified 03-28-2023 by Scott Burdick-Yahya
-#modifed Dec 2023 by Ben Saenz
+"""
+Simple DSS + Interpolation Utilities
 
-from hec.heclib.dss import HecDss
-from hec.io import DSSIdentifier
-from hec.io import TimeSeriesContainer
-from rma.util.RMAConst import MISSING_DOUBLE
-from hec.hecmath import HecMathException
-from hec.heclib.util.Heclib import UNDEFINED_DOUBLE
-import hec.hecmath.TimeSeriesMath as tsmath
-from com.rma.model import Project
-import os,shutil,copy,sys,math
-from java.util import Vector, Date
+This module contains helper routines used within HEC-WAT/ResSim/W2 scripting
+for the Sacramento WTMP workflow. It includes:
 
-import datetime
-from hec.heclib.util import HecTime
+- DSS record utilities (copying, reading, resampling, unit fixes, flow math).
+- Time conversion helpers between HEC `HecTime`/Java `Date` and Python `datetime`.
+- Lightweight linear interpolation for Python `datetime` series.
+- Convenience functions for path manipulation and alternative-based resolution.
 
 
 # --- Utility Function for Python 2 timedelta.total_seconds() ---
@@ -148,55 +141,63 @@ def copy_dss_ts(dss_rec,new_fpart=None,new_dss_rec=None,
     # error check inputs - there are flexible way to copy record
     if dss_file_path is None and dss_file_handle is None:
         raise ValueError('copy_dss_rec_to_new_fpart: you must supply either a valid dss_file_path OR dss_file_handle')
+    
     if new_fpart is None and new_dss_rec is None:
         raise ValueError('copy_dss_rec_to_new_fpart: you must supply either a new_fpart OR new_dss_rec')
 
-    # (open dss) get record tsc
+    # Open dss get record tsc
     if dss_file_handle is not None:
-        dss_fm = dss_file_handle
-        print('copy_dss_ts - reading input from open file:',dss_rec)
+        # reuse provided file handle
+        dss_fm = dss_file_handle  
+
     else:
-        dss_fm = HecDss.open(dss_file_path)
-        print('copy_dss_ts - reading input:',dss_file_path,dss_rec)
-    tsc = dss_fm.get(dss_rec,True)
-    print('tsc.fullName',tsc.fullName)
+        # open by path if handle not supplied
+        dss_fm = HecDss.open(dss_file_path)  
+
+    # read full record
+    tsc = dss_fm.get(dss_rec, True)  
 
     # new dss rec name
     # build the output path, either using the explicit new record name or by substituting a new F-part into the source path
     if new_dss_rec is not None:
-        dss_rec_out = new_dss_rec
+        # Explicit destination takes priority 
+        dss_rec_out = new_dss_rec  
+    
     else:
-        rec_parts = tsc.fullName.split('/')
-        print(rec_parts)
-        rec_parts[6] = new_fpart
-        dss_rec_out = '/'.join(rec_parts)    
+        # No pathname provided. Use default.
+        rec_parts = tsc.fullName.split('/')  # tokenize pathname
+        rec_parts[6] = new_fpart  # update F-part
+        dss_rec_out = '/'.join(rec_parts)  # rebuild pathname
 
     # fix some terrible units along the way (normalize non-standard degree unit labels to the standard C/F abbreviations)
     if tsc.units.lower() == 'degc':
-        tsc.units = 'C'
+        tsc.units = 'C'  # normalize to 'C'
+    
     elif tsc.units.lower() == 'degf':
-        tsc.units = 'F'
+        tsc.units = 'F'  # normalize to 'F'
 
+    # Convert from F to C if needed
     if tsc.units.lower() == 'f' and checkMakeCelsius:
-        T_values = tsc.values
+        T_values = tsc.values  # get values
+        
         for i, TT in enumerate(T_values):
-            T_values[i] = (TT-32.0)*5.0/9.0
-        tsc.units = 'C'
-        tsc.values = T_values
+            T_values[i] = (TT - 32.0) * 5.0 / 9.0  # convert °F -> °C in-place
         
     # write
     tsc.fullName = dss_rec_out
     # write to the alternate output file if one was given, otherwise write back to the source file
     if dss_file_alt_outpath is not None:
-        dss_fm_alt = HecDss.open(dss_file_alt_outpath)
-        dss_fm_alt.put(tsc)
-        dss_fm_alt.close()
+        dss_fm_alt = HecDss.open(dss_file_alt_outpath)  # open alternate output DSS
+        dss_fm_alt.put(tsc)  # write to alt file
+        dss_fm_alt.close()  # close alt
+    
     else:
-        dss_fm.put(tsc)
+        dss_fm.put(tsc)  # write to same file
 
     # only close the file handle if this function opened it itself
     if dss_file_handle is None:
-        dss_fm.close()
+        dss_fm.close()  
+
 
 def jday_from_tsc(tsc):
     """
@@ -230,7 +231,9 @@ def decimal_doy(dt):
     """
     doy = dt.timetuple().tm_yday
     fractional_day = (dt.hour / 24.0) + (dt.minute / 1440.0) + (dt.second / 86400.0) + (dt.microsecond / 86400000000.0)
-    return doy + fractional_day
+    
+    # Sum and return integer and fractional parts
+    return doy + fractional_day  
 
 
 def organizeLocations(curAlt, location_objs, loc_names, return_dss_paths=False):
@@ -264,22 +267,34 @@ def organizeLocations(curAlt, location_objs, loc_names, return_dss_paths=False):
     print('num_locs:',len(location_objs))
     # for each requested location name, find its matching location object and resolve it
     for name in loc_names:
-        i_loc = findLocationOrder(curAlt,location_objs,name)
-        print('name:',name,'i_loc:',i_loc)
+        # Get the index of the location
+        i_loc = findLocationOrder(curAlt, location_objs, name)
+        
+        # Extract the DSS paths if requested
         if return_dss_paths:
             lo1 = location_objs[i_loc]
             print(lo1)
             # if this location is linked to an upstream model, load its time series and fix
             # its F-part; otherwise, it already has a fixed DSS path to use directly
             if lo1.isLinkedToPreviousModel():
-                tspath = str(curAlt.loadTimeSeries(lo1))
-                tspath = fixInputLocationFpart(curAlt, tspath)
+                # load from previous model linkage
+                tspath = str(curAlt.loadTimeSeries(lo1))  
+                
+                # adjust F-part
+                tspath = fixInputLocationFpart(curAlt, tspath)  
+            
             else:
-                tspath = str(lo1.getDssPath())
-            print(tspath)
+                # Data is not linked. Use a direct path.
+                tspath = str(lo1.getDssPath())  
+            
+            # Append into the list
             locations_list.append(tspath)
+        
         else:
+            # Use the location information directly
             locations_list.append(location_objs[i_loc])
+    
+    # Return the list to the calling function
     return locations_list
 
 
@@ -329,10 +344,14 @@ def findLocationOrder(curAlt,location_objs,name):
         print(i,'Checking loc: ',loc.getName())
         print('loc:',loc)
         if name == loc.getName():
-            return i
+            # return match position
+            return i  
+    
     # if we make it here, our input/output location name was not found
-    curAlt.addComputeMessage("Scripting - Location name not found: "+name)
-    sys.exit(1)
+    curAlt.addComputeMessage("Scripting - Location name not found: " + name)  # log
+    
+    # abort to indicate error
+    sys.exit(1)  
 
 def first_value(dss_file,dss_rec,start_str=None,end_str=None):
     """
@@ -354,11 +373,18 @@ def first_value(dss_file,dss_rec,start_str=None,end_str=None):
     dssFm = HecDss.open(dss_file)        
     # if no time bounds were given, read the entire record; otherwise read only the given window
     if start_str is None and end_str is None:
-        tsc = dssFm.get(dss_rec,True)
+        # read full record
+        tsc = dssFm.get(dss_rec, True)  
+    
     else:
-        tsc = dssFm.read(dss_rec,start_str,end_str,False).getData()
-    dssFm.close()
-    return tsc.values[0]
+        # Start and end times are provided. Read the partial series.
+        tsc = dssFm.read(dss_rec, start_str, end_str, False).getData()  
+    
+    # close DSS
+    dssFm.close()  
+    
+    # Return first value
+    return tsc.values[0]  
 
 
 def standardize_interval(tsm, interval, makePerAver=True):
@@ -394,17 +420,17 @@ def standardize_interval(tsm, interval, makePerAver=True):
     elif interval.lower()=='1week':
         intint=10800
     else:
-        print('interval not supported:',interval)
+        # Invalid condition. Error and exit
         sys.exit(-1)
 
     # only resample if the current interval differs from the requested one
     if tsc.interval != intint:
         if makePerAver:
-            #tsc.type = 'PER-AVER'  # make sure it's per-aver ... we are
-            tsm.setType('PER-AVER')
-        return tsm.transformTimeSeries(interval, "", "AVE")
+            tsm.setType('PER-AVER')  # set series type on math object
+        return tsm.transformTimeSeries(interval, "", "AVE")  # perform transform
+    
     else:
-        return tsm
+        return tsm  # already standardized
 
 
 def get_sanitized_record_list(dss_file_path):
@@ -430,12 +456,16 @@ def get_sanitized_record_list(dss_file_path):
     
     # for each raw record path, blank out its date field and skip if already seen
     for r in recs:
-        rec_tokens = r.split('/')
-        rec_tokens[4] = ''  # erase date string, if it exists
-        r_sanitized = '/'.join(rec_tokens)
+        rec_tokens = r.split('/')  # split into parts
+        rec_tokens[4] = ''  # erase date string, if it exists (E-part)
+        r_sanitized = '/'.join(rec_tokens)  # rebuild pathname
+    
         if not r_sanitized in sanitized_recs:
-            sanitized_recs.append(r_sanitized)
+            sanitized_recs.append(r_sanitized)  # dedupe
+    
+    # Return cleaned list to the calling function
     return sanitized_recs  
+
 
 def hectimes_from_tsm(tsm):
     """
@@ -452,9 +482,12 @@ def hectimes_from_tsm(tsm):
     times = tsm.getContainer().times
     htimes = []
     for i in range(tsm.getContainer().numberValues):
-        htimes.append(HecTime())
-        htimes[-1].set(times[i])
-    return htimes
+        htimes.append(HecTime())  # construct new HecTime per value
+        htimes[-1].set(times[i])  # assign numeric time
+    
+    # Return list of HecTime
+    return htimes  
+
 
 def hectimes_from_tsc(tsc):
     """
@@ -471,8 +504,10 @@ def hectimes_from_tsc(tsc):
     htimes = []
     # for each raw time value, build a corresponding HecTime object
     for i in range(tsc.numberValues):
-        htimes.append(HecTime())
-        htimes[-1].set(tsc.times[i])
+        htimes.append(HecTime())  # new HecTime
+        htimes[-1].set(tsc.times[i])  # assign from container times
+    
+    # Return the output list of values
     return htimes
 
 
@@ -506,13 +541,17 @@ def shift_pit_river_time(input_dss_file,dss_rec,output_dss_file,out_rec,start_da
 
     tsm_pit = dss_read_ts_safe(input_dss_file,dss_rec,start_date=start_date,end_date=end_date,returnTSM=True)
 
+    # Shift the values by -12 hours
     tsm_pit = tsm_pit.shiftInTime("-12Hour")
-    tsc_pit = tsm_pit.getData()
-    tsc_pit.fullName = out_rec  
+    
+    # Request the data and path
+    tsc_pit = tsm_pit.getData()  # unwrap container
+    tsc_pit.fullName = out_rec  # set destination pathname
 
-    dss_out = HecDss.open(output_dss_file)
-    dss_out.put(tsc_pit)
-    dss_out.close()
+    # Output the shifted series
+    dss_out = HecDss.open(output_dss_file)  # open destination
+    dss_out.put(tsc_pit)  # write shifted series
+    dss_out.close()  # close output DSS
 
 
 def shift_ts_time(input_dss_file,dss_rec,output_dss_file,out_rec,shift_str,start_date=None,end_date=None):
@@ -545,13 +584,17 @@ def shift_ts_time(input_dss_file,dss_rec,output_dss_file,out_rec,shift_str,start
     
     tsm = dss_read_ts_safe(input_dss_file,dss_rec,start_date=start_date,end_date=end_date,returnTSM=True)
 
-    tsm = tsm.shiftInTime(shift_str)
-    tsc = tsm.getData()
-    tsc.fullName = out_rec  
+    # Shift the values
+    tsm = tsm.shiftInTime(shift_str)  # perform time shift
+    
+    # Request the data and the path
+    tsc = tsm.getData()  # unwrap to container
+    tsc.fullName = out_rec  # set destination pathname
 
-    dss_out = HecDss.open(output_dss_file)
-    dss_out.put(tsc)
-    dss_out.close()
+    # Output the shifted values
+    dss_out = HecDss.open(output_dss_file)  # open destination DSS
+    dss_out.put(tsc)  # write shifted series
+    dss_out.close()  # close output
 
 
 def dss_read_ts_safe(dssFilePath,dssRec,start_date=None,end_date=None,returnTSM=False,
@@ -590,35 +633,45 @@ def dss_read_ts_safe(dssFilePath,dssRec,start_date=None,end_date=None,returnTSM=
     # recordExists() seems to check for the individual database "pages" or something, with a date, or
     # date range, required?  TODO: figure out how to check if a date-agnostic record exists.  Or, don't,
     # since HECLIB produces a pretty nice error if you try to open a non-existant record.
-    #if not dss.recordExists(dssRec):
-    #    print('DSS rec does not exist for reading:')
-    #    print('File: '+dssFilePath)
-    #    print('Rec: '+dssRec)
-    #    sys.exit(-1)
-    #else:
     if start_date is None and end_date is None:
-        tsc = dss.get(dssRec,True) # use get with True here to capture entire record, 'read' seems to leave off data randomly
-        dss.close()
+        # full record read
+        tsc = dss.get(dssRec, True)  
+        
+        # close DSS
+        dss.close()  
+        
+        # Print debug information if enabled
         if debug:
             print('Reading DSS in script...')
-            print('    file: '+dssFilePath)
-            print('    record: '+dssRec)
+            print('    file: ' + dssFilePath)
+            print('    record: ' + dssRec)
+        
+        # Wrap in math container if requested
         if returnTSM:
-            return tsmath(tsc)
+            return tsmath(tsc)  
+        
         else:
             return tsc
     # if both bounds were given, read only within that time window
     elif start_date is not None and end_date is not None:
-        tsm = dss.read(dssRec,start_date,end_date,False) # 'read' allows time windows in call, but returns tsm
-        dss.close()
+        # Windowed read 
+        tsm = dss.read(dssRec, start_date, end_date, False)  
+        
+        # close DSS
+        dss.close()  
+        
+        # Print debug information if enabled
         if debug:
-            print('Reading DSS in script between '+start_date+' and ',+end_date)
-            print('    file: '+dssFilePath)
-            print('    record: '+dssRec)
+            print('Reading DSS in script between ' + start_date + ' and ', + end_date)
+            print('    file: ' + dssFilePath)
+            print('    record: ' + dssRec)
+        
+        # Wrap in matho container if requested
         if returnTSM:
-            return tsm
+            return tsm  
+        
         else:
-            return tsm.getData()
+            return tsm.getData()  # unwrap to data container
 
 
 def data_from_dss(dss_file,dss_rec,starttime_str, endtime_str):
@@ -643,14 +696,40 @@ def data_from_dss(dss_file,dss_rec,starttime_str, endtime_str):
     dssFm = HecDss.open(dss_file)
     # if no time bounds were given, read the entire record; otherwise read only the given window
     if starttime_str is None and endtime_str is None:
-        tsc = dssFm.get(dss_rec,True)
+        # Full record
+        tsc = dssFm.get(dss_rec, True)  
+    
     else:
-        tsc = dssFm.read(dss_rec, starttime_str, endtime_str, False).getData()
-    dssFm.close()
-    return tsc.values
+        # Read a portion of the timeseries
+        tsc = dssFm.read(dss_rec, starttime_str, endtime_str, False).getData()  
+    
+    # close DSS
+    dssFm.close()  
+    
+    # Return values to the calling function
+    return tsc.values  
 
 
 def hectime_to_datetime(tsc):
+    """
+    **Deprecated**: Convert HEC times in a `TimeSeriesContainer` to Python `datetime`.
+
+    Parameters
+    ----------
+    tsc : hec.io.TimeSeriesContainer
+        Container with HEC times accessible via `getHecTime(i)`.
+
+    Returns
+    -------
+    list of datetime.datetime
+        Python datetimes corresponding to each container time.
+
+    Notes
+    -----
+    This routine can round hours incorrectly and applies a timezone offset
+    returning GMT. Prefer `datetimes_from_tsc()` with `hecTime_to_datetime()`
+    for safer conversion in new code.
+    """
     """
     Deprecated! This routine, and the javatime processing it depends on, is capable of rounding dates 
     to the wrong hour.  It also adds a timezone offset and returns GMT, which is not usually wanted.
@@ -666,21 +745,122 @@ def hectime_to_datetime(tsc):
             tsc, converted via Java Date/timestamp (in GMT, with
             potential rounding issues - see deprecation note above).
     """
-
+    
+    # Get a list of hectimes
     hectimes = hectimes_from_tsc(tsc)
+    
+    # Define a list to hold values
     dtt = []
     # for each timestamp, convert via Java Date/timestamp into a Python datetime
     for j in range(tsc.numberValues):
         # Assuming hectime can be converted to Java Date or has method to get the equivalent
-        java_date = tsc.getHecTime(j).getJavaDate(0)  
-        
-        # Convert Java Date to Python datetime
-        timestamp = (java_date.getTime() / 1000)
-        d = datetime.datetime.fromtimestamp(timestamp)
-        #print('hectime_to_datetime:',tsc.getHecTime(j).toString(),timestamp,d.strftime('%d%b%Y %H%M'))
-        dtt.append(datetime.datetime.fromtimestamp(timestamp))
+        java_date = tsc.getHecTime(j).getJavaDate(0)  # Java date with timezone index
 
-    return dtt
+        # Convert Java Date to Python datetime
+        timestamp = (java_date.getTime() / 1000)  # milliseconds to seconds
+        d = datetime.datetime.fromtimestamp(timestamp)  # local conversion (unused local var)
+        
+        # Append converted time
+        dtt.append(datetime.datetime.fromtimestamp(timestamp))  
+
+    # Return list of datetimes
+    return dtt  
+
+
+def hecTime_to_datetime(hectimes):
+    """
+    Convert a list of `HecTime` objects to Python `datetime`.
+
+    Parameters
+    ----------
+    hectimes : list of hec.heclib.util.HecTime
+        HEC times to convert.
+
+    Returns
+    -------
+    list of datetime.datetime
+        Converted Python datetimes via string parsing helper.
+    """
+    
+    return [hec_str_time_to_dt(h.toString(), longStr=True) for h in hectimes]
+
+
+def datetimes_from_tsc(tsc):
+    """
+    Convert a `TimeSeriesContainer` to Python datetimes via `HecTime` conversion.
+
+    Parameters
+    ----------
+    tsc : hec.io.TimeSeriesContainer
+        Source container to convert.
+
+    Returns
+    -------
+    list of datetime.datetime
+        Converted Python datetimes.
+    """
+    
+    return hecTime_to_datetime(hectimes_from_tsc(tsc)) 
+
+
+def hec_str_time_to_dt(hec_str_time, longStr=False):
+    """
+    Convert a HEC time string to Python `datetime`, handling "24:00"/"2400" rollover.
+
+    Parameters
+    ----------
+    hec_str_time : str
+        HEC-formatted time string. If `longStr` is True, uses verbose format
+        like "DD Month YYYY, HH:MM"; otherwise "DDMonYYYY HHMM".
+    longStr : bool, optional
+        Flag to select the verbose format with `24:00` rollover.
+
+    Returns
+    -------
+    datetime.datetime
+        Converted Python `datetime`.
+
+    Notes
+    -----
+    If the string ends with "2400" or "24:00" (depending on format), it is
+    converted to "0000"/"00:00" and one day is added.
+    """
+
+    # Define a flag to indicate rollover
+    add_day = False
+    
+    # Definte the format of the time string
+    if longStr:
+        dt_format = "%d %B %Y, %H:%M"  # verbose format
+        check24 = '24:00'
+        check00 = '00:00'
+    
+    else:
+        dt_format = '%d%b%Y %H%M'  # compact HEC format
+        check24 = '2400'
+        check00 = '0000'
+
+    # Determine the length of the hour string
+    checkLen = len(check24) * (-1) 
+    
+    # Determine if the hour time needs to be adjusted
+    if hec_str_time.endswith(check24):
+        my_hec_str_time = hec_str_time[:checkLen] + check00  # replace ending time
+        add_day = True  # add one day after parse
+    
+    else:
+        my_hec_str_time = hec_str_time  # unchanged
+
+    # Parse the time with the correct format
+    dt = datetime.datetime.strptime(my_hec_str_time, dt_format)
+    
+    # Add the day for the rollover
+    if add_day:
+        dt = dt + datetime.timedelta(days=1)
+    
+    # Return the jython timestamp
+    return dt 
+
 
 def hecTime_to_datetime(hectimes):
     """
@@ -804,52 +984,118 @@ def appendAPart(current_path, ApartAppend):
         str: The DSS path with its A-part updated.
     """
     tspath = tspath.split('/')
-    Apart = tspath[1]
+
+    # Extract the A part of the path
+    Apart = tspath[1]  
+    
+    # Determine how to handle the A part
     if len(Apart) == 0:
-        new_Apart = ApartAppend
+        new_Apart = ApartAppend  # replace empty A-part
+    
     else:
-        new_Apart = Apart + '_' + ApartAppend
+        new_Apart = Apart + '_' + ApartAppend  # append with underscore
+    
+    # Assign new A-part
     tspath[1] = new_Apart
-    tspath = '/'.join(tspath)
-    return tspath
+
+    # Rebuild pathname
+    tspath = '/'.join(tspath)  
+    
+    # Return updated path
+    return tspath  
+
 
 def getDataLocationDSSInfo(location, currentAlternative, computeOptions):
+    """
+    Resolve DSS path and file location for a model location, considering linkage.
+
+    Parameters
+    ----------
+    location : object
+        Location object supporting linkage queries.
+    currentAlternative : object
+        Alternative context for `loadTimeSeries()` and F-part adjustments.
+    computeOptions : object
+        Provides compute-time DSS filename.
+
+    Returns
+    -------
+    (str, str)
+        Tuple of (tspath, dsspath) for inputs/outputs.
+    """
+    
+    # Determine if the data is linked to the previous model
     if location.isLinkedToPreviousModel():
-        tspath = str(currentAlternative.loadTimeSeries(location))
-        tspath = fixInputLocationFpart(currentAlternative, tspath)
-        dsspath = computeOptions.getDssFilename()
+        # Data is linked. Pull information from the previous model.
+        tspath = str(currentAlternative.loadTimeSeries(location))  # path from previous model
+        tspath = fixInputLocationFpart(currentAlternative, tspath)  # adjust F-part
+        dsspath = computeOptions.getDssFilename()  # compute DSS file
+    
     else:
-        tspath = location.getLinkedToLocation().getDssPath()
-        rundir = Project.getCurrentProject().getProjectDirectory()
-        dsspath = location.getLinkedToLocation().get_dssFile()
-        dsspath = os.path.join(rundir, dsspath)
-    return tspath, dsspath
+        # Data is not linked. Create the direct path.
+        tspath = location.getLinkedToLocation().getDssPath()  # direct path
+        rundir = Project.getCurrentProject().getProjectDirectory()  # project directory
+        dsspath = location.getLinkedToLocation().get_dssFile()  # relative DSS path
+        dsspath = os.path.join(rundir, dsspath)  # absolute DSS path
+    
+    # Return the path information to the calling function
+    return tspath, dsspath 
 
-def strip_templateID_and_rename_records(dssFilePath,currentAlt):
 
+def strip_templateID_and_rename_records(dssFilePath, currentAlt):
+    """
+    Strip the first 4 characters from the F-part (when it contains '-') for all records, then rename.
+
+    Parameters
+    ----------
+    dssFilePath : str
+        Path to the DSS file to modify.
+    currentAlt : object
+        Alternative context for logging messages.
+
+    Returns
+    -------
+    None
+
+    Notes
+    -----
+    Creates a `.bak` copy, builds new pathnames in a `Vector`, and performs
+    a bulk rename via `HecDss.renameRecords()`. If the F-part does not contain
+    a '-', returns early (mirroring original code behavior).
+    """
+    
     # make copy of dss file
-    shutil.copyfile(dssFilePath,dssFilePath+'.bak')
+    shutil.copyfile(dssFilePath, dssFilePath + '.bak')  # backup original file
 
-    # rename all records, stripping first 4 chars from f-part
-    dss = HecDss.open(dssFilePath)
-    rec_names = dss.getPathnameList()
-    new_rec_names = Vector()
-    #currentAlt.addComputeMessage(type(rec_names).__name__)
-    for i,r in enumerate(rec_names):        
-        #currentAlt.addComputeMessage(type(r).__name__)        
-        parts = r.split('/')
+    # Rename all records, stripping first 4 chars from f-part
+    dss = HecDss.open(dssFilePath)  # open DSS
+    rec_names = dss.getPathnameList()  # enumerate pathnames
+    new_rec_names = Vector()  # Java Vector for new names
+    
+    # Loop and process each record
+    for i, r in enumerate(rec_names):
+        # split into components
+        parts = r.split('/')  
+        
+        # early exit if F-part does not contain '-'
         if not '-' in parts[-2]:
-            return
-        parts[-2] = parts[-2][4:]
-        new_rec_names.add('/'.join(parts))
-        currentAlt.addComputeMessage('Fixing path: '+r+' --> '+new_rec_names[-1])
-        #currentAlt.addComputeMessage(type(new_rec_names).__name__)
-        #currentAlt.addComputeMessage(type(new_rec_names[i]).__name__)
-        #if i==2:
-        #    break
-    dss.renameRecords(rec_names, new_rec_names)
-    #currentAlt.addComputeMessage(type(new_rec_names).__name__)
-    dss.close()
+            return  
+        
+        # strip first 4 chars from F-part
+        parts[-2] = parts[-2][4:]  
+        
+        # collect new pathname
+        new_rec_names.add('/'.join(parts))  
+        
+        # log rename
+        currentAlt.addComputeMessage('Fixing path: ' + r + ' --&gt; ' + new_rec_names[-1])  
+    
+    # Rename all records concurrently
+    dss.renameRecords(rec_names, new_rec_names)  
+    
+    # Close the DSS file
+    dss.close()  
+
 
 def add_DSS_Data(currentAlt, dssFile, timewindow, input_data, output_path):
     """
@@ -875,19 +1121,24 @@ def add_DSS_Data(currentAlt, dssFile, timewindow, input_data, output_path):
     endtime_str = timewindow.getEndTimeString()
     currentAlt.addComputeMessage('Looking from {0} to {1}'.format(starttime_str, endtime_str))
     dssFm = HecDss.open(dssFile)
+    
+    # Create the data holder
     output_data = []
     # for each input record, read it and add its values into the running total
     for dsspath in input_data:
-        print('reading', str(dsspath))
-        ts = dssFm.read(dsspath, starttime_str, endtime_str, False)
-        ts = ts.getData()
+        print('reading', str(dsspath))  # diagnostic
+        # Read the time series
+        ts = dssFm.read(dsspath, starttime_str, endtime_str, False)  
+        
+        # Get the container and the data
+        ts = ts.getData()  
         values = ts.values
         times = ts.times
         units = ts.units
         dsstype = ts.type
         # the first record seeds the running total; subsequent records are added on
         if len(output_data) == 0:
-            output_data = values
+            output_data = values  # seed with first series
         else:
             # add this record's values onto the running total, timestep by timestep
             for vi, val in enumerate(values):
@@ -910,6 +1161,7 @@ def add_DSS_Data(currentAlt, dssFile, timewindow, input_data, output_path):
     currentAlt.addComputeMessage("Number of Written values: {0}".format(len(output_data)))
     return 0
 
+
 def resample_dss_ts(inputDSSFile, inputRec, timewindow, outputDSSFile, newPeriod, lookback_1mon=False, pad_start_days=0):
     '''Can upsample an even period DSS timeseries, e.g. go from 1DAY -> 1HOUR, or downsample.  However, hecmath likes to
     clip of days that don't have the complete 24 hour cycle.  So, we pad here, but there is a chance we ask for data not
@@ -927,23 +1179,32 @@ def resample_dss_ts(inputDSSFile, inputRec, timewindow, outputDSSFile, newPeriod
         endtime_str = endtime_str[:-4] + '2400' # clipped days don't work in computes ... hope the downloaded DMS data is long enough to do this.
         # optionally pad extra days onto the start of the window
         if pad_start_days > 0:
-            dt_start = hec_str_time_to_dt(starttime_str) - datetime.timedelta(days=pad_start_days)
-            starttime_str = dt_start.strftime('%d%b%Y %H%M')
+            dt_start = hec_str_time_to_dt(starttime_str) - datetime.timedelta(days=pad_start_days)  # pad backwards
+            starttime_str = dt_start.strftime('%d%b%Y %H%M')  # reformat to HEC string
+        
         if lookback_1mon:
-            dt_start = hec_str_time_to_dt(starttime_str) - datetime.timedelta(days=-31)
-            starttime_str = dt_start.strftime('%d%b%Y %H%M')      
-        print('Resampling',newPeriod, inputRec,starttime_str,endtime_str)
-        tsm = dssFm.read(inputRec, starttime_str, endtime_str, False)
+            dt_start = hec_str_time_to_dt(starttime_str) - datetime.timedelta(days=-31)  # original code (minus negative)
+            starttime_str = dt_start.strftime('%d%b%Y %H%M')  # format back
+        
+        # Read the sieres
+        print('Resampling', newPeriod, inputRec, starttime_str, endtime_str)  # diagnostic
+        tsm = dssFm.read(inputRec, starttime_str, endtime_str, False)  # windowed read
+    
     else:
-        print('Resampling',newPeriod, inputRec)
-        tsm = dssFm.read(inputRec)  # caution - 'read' sometimes doesn't get whole record?  Need to use get?
+        # Resample on the whole series
+        print('Resampling', newPeriod, inputRec)  # diagnostic
+        tsm = dssFm.read(inputRec)  # full-record read (caution per original)
 
-    tsm_new = tsm.transformTimeSeries(newPeriod,"","AVE")
-    dssFm.close()
+    # Perform the resampling action
+    tsm_new = tsm.transformTimeSeries(newPeriod, "", "AVE")
+    
+    # Close the DSS file
+    dssFm.close()  # close input DSS
 
-    dssFmout = HecDss.open(outputDSSFile)
-    dssFmout.write(tsm_new)
-    dssFmout.close()
+    # Open, write to, and close the file
+    dssFmout = HecDss.open(outputDSSFile)  # open output DSS
+    dssFmout.write(tsm_new)  # write resampled series
+    dssFmout.close()  # close output
 
 
 def airtemp_lapse(dss_file,dss_rec,lapse_in_C,dss_outfile,f_part):
@@ -978,17 +1239,29 @@ def airtemp_lapse(dss_file,dss_rec,lapse_in_C,dss_outfile,f_part):
     lapse = lapse_in_C
     # if the source series is in Fahrenheit, convert the lapse amount to an equivalent Fahrenheit offset
     if 'f' in tsm.getUnits().lower():
-        lapse = lapse*9.0/5.0+32.0
-    tsm = tsm.add(lapse)
-    tsc = tsm.getData()
-    dss.close()
+        lapse = lapse * 9.0 / 5.0 + 32.0  # convert to °F if series units are Fahrenheit
+    
+    # Add the values to the series
+    tsm = tsm.add(lapse) 
+    
+    # Get the values to write to the new series
+    tsc = tsm.getData()  
+    
+    # Clsoe the input file
+    dss.close()  
 
-    pathparts = dss_rec.split('/')
-    pathparts[-2] = f_part
-    tsc.fullName = '/'.join(pathparts)
-    dss_out = HecDss.open(dss_outfile)
-    dss_out.write(tsc)
-    dss_out.close()
+    # Write the output to a new file
+    # Separate out the current path
+    pathparts = dss_rec.split('/')  # split pathname
+    pathparts[-2] = f_part  # change F-part
+    
+    # Rebuild fullName
+    tsc.fullName = '/'.join(pathparts)  
+    
+    # Write
+    dss_out = HecDss.open(dss_outfile)  # open output DSS
+    dss_out.write(tsc)  # write adjusted series
+    dss_out.close()  # close output DSS
 
 def min_ts(dss_file,dss_rec,min_value,dss_outfile,f_part):
     """
@@ -1014,14 +1287,21 @@ def min_ts(dss_file,dss_rec,min_value,dss_outfile,f_part):
 
     # for each value, raise it to the minimum if it falls below that threshold
     for vi, v in enumerate(tsc.values):
-        tsc.values[vi] = max(v, min_value)
+        tsc.values[vi] = max(v, min_value)  # enforce minimum per element
 
-    pathparts = dss_rec.split('/')
-    pathparts[-2] = f_part
+    # Write the output to the output file
+    # Separate out the current path
+    pathparts = dss_rec.split('/')  # split pathname
+    pathparts[-2] = f_part  # update F-part
+    
+    # Rebuild the path name
     tsc.fullName = '/'.join(pathparts)
-    dss_out = HecDss.open(dss_outfile)
-    dss_out.write(tsc)
-    dss_out.close()
+    
+    # Write
+    dss_out = HecDss.open(dss_outfile)  # open output DSS
+    dss_out.write(tsc)  # write clamped series
+    dss_out.close()  # close output DSS
+
 
 def add_flows(currentAlt, timewindow, inflow_records, dss_file, output_dss_record_name, output_dss_file):
      """
@@ -1066,8 +1346,9 @@ def add_flows(currentAlt, timewindow, inflow_records, dss_file, output_dss_recor
     currentAlt.addComputeMessage('Looking from {0} to {1}'.format(starttime_str, endtime_str))
     dssFm = HecDss.open(dss_file)
 
-    inflows = []
-    times = []
+    # Define lists to hold the data
+    inflows = []  # accumulator for sums
+    times = []  # reference times
 
     # Read inflows
     print('Reading inflows')
@@ -1082,23 +1363,23 @@ def add_flows(currentAlt, timewindow, inflow_records, dss_file, output_dss_recor
             print(starttime_str, endtime_str)
             # if the record path specifies an alternate DSS file via '::', read from that file instead
             if '::' in inflow_record:
-                dss_file_alt,inflow_rec_alt = inflow_record.split('::')
-                dssFm_alt = HecDss.open(dss_file_alt)
-                ts = dssFm_alt.read(inflow_rec_alt, starttime_str, endtime_str, False)
-                dssFm_alt.close()
-                print(dss_file_alt)
+                dss_file_alt, inflow_rec_alt = inflow_record.split('::')  # alternate DSS file syntax
+                dssFm_alt = HecDss.open(dss_file_alt)  # open alt DSS
+                ts = dssFm_alt.read(inflow_rec_alt, starttime_str, endtime_str, False)  # windowed read
+                dssFm_alt.close()  # close alt DSS
+                print(dss_file_alt)  # echo file
+            
             else:
-                print(dss_file)
-                ts = dssFm.read(pathname, starttime_str, endtime_str, False)
-            ts_data = ts.getData()
-            values = ts_data.values
-            hectimes = ts_data.times
-            units = ts_data.units
-            tstype = ts_data.type
-            # print('num values {0}'.format(len(values)))
-            # print('start {0}'.format(ts_data.getStartTime()))
-            # print('end {0}'.format(ts_data.getEndTime()))
-            if hectimes[0] < starttime_hectime: #if startdate is before the timewindow..
+                print(dss_file)  # echo default file
+                ts = dssFm.read(pathname, starttime_str, endtime_str, False)  # windowed read
+            
+            ts_data = ts.getData()  # unwrap to container
+            values = ts_data.values  # series values
+            hectimes = ts_data.times  # HEC times
+            units = ts_data.units  # units string
+            tstype = ts_data.type  # series type
+            
+            if hectimes[0] < starttime_hectime:  # if startdate is before the timewindow..
                 print('start date ({0}) from DSS before timewindow ({1})..'.format(hectimes[0], starttime_hectime))
                 st_offset = (starttime_hectime - hectimes[0]) / (hectimes[1] - hectimes[0])
                 values = values[st_offset:]
@@ -1106,49 +1387,45 @@ def add_flows(currentAlt, timewindow, inflow_records, dss_file, output_dss_recor
             # if the record's data extends past the run window, trim the trailing values
             if hectimes[-1] > endtime_hectime:
                 print('end date ({0}) from DSS after timewindow ({1})..'.format(hectimes[-1], endtime_hectime))
-                st_offset = (hectimes[-1] - endtime_hectime) / (hectimes[1] - hectimes[0])
-                values = values[:(len(hectimes) - st_offset)]
-                hectimes = hectimes[:(len(hectimes) - st_offset)]
-                
+                st_offset = (hectimes[-1] - endtime_hectime) / (hectimes[1] - hectimes[0])  # compute tail steps
+                values = values[:(len(hectimes) - st_offset)]  # trim end values
+                hectimes = hectimes[:(len(hectimes) - st_offset)]  # trim end times
 
         except HecMathException:
-            currentAlt.addComputeMessage('ERROR reading' + str(pathname))
-            sys.exit(-1)
+            currentAlt.addComputeMessage('ERROR reading' + str(pathname))  # log failure
+            sys.exit(-1)  # abort
 
         # if this record is in cms, convert it to cfs before summing
         if units.lower() == 'cms':
-            currentAlt.addComputeMessage('Converting cms to cfs')
+            currentAlt.addComputeMessage('Converting cms to cfs')  # log conversion
             convvals = []
             for flow in values:
-                convvals.append(flow * 35.314666213)
-            values = convvals
+                convvals.append(flow * 35.314666213)  # cms -> cfs
+            values = convvals  # replace with converted
 
         # the first record seeds the running total; subsequent records are added on
         if len(inflows) == 0:
-            inflows = values
-            times = hectimes #TODO: check how this handles missing values
+            inflows = values  # seed sum
+            times = hectimes  # store times (TODO: missing values handling)
+        
         else:
             # add this record's values onto the running total, timestep by timestep
             for vi, v in enumerate(values):
-                inflows[vi] += v
+                inflows[vi] += v  # element-wise sum
 
     # Output record
-    tsc = TimeSeriesContainer()
-    tsc.times = times
-    tsc.fullName = output_dss_record_name
-    tsc.values = inflows
-    #tsc.startTime = times[1]
-    tsc.units = 'CFS'
-    tsc.type = tstype
-    #tsc.endTime = times[-1]
-    tsc.numberValues = len(inflows)
-    #tsc.startHecTime = timewindow.getStartTime()
-    #tsc.endHecTime = timewindow.getEndTime()
-    dssFm_out = HecDss.open(output_dss_file)
-    dssFm_out.write(tsc)
+    tsc = TimeSeriesContainer()  # build output container
+    tsc.times = times  # assign times
+    tsc.fullName = output_dss_record_name  # destination path
+    tsc.values = inflows  # summed flows
+    tsc.units = 'CFS'  # output in CFS
+    tsc.type = tstype  # carry type
+    tsc.numberValues = len(inflows)  # series length
+    dssFm_out = HecDss.open(output_dss_file)  # open output DSS
+    dssFm_out.write(tsc)  # write output
 
-    dssFm.close()
-    dssFm_out.close()
+    dssFm.close()  # close input DSS
+    dssFm_out.close()  # close output DSS
 
 
 def add_or_subtract_flows(currentAlt, timewindow, inflow_records, dss_file, operation,
@@ -1210,8 +1487,9 @@ def add_or_subtract_flows(currentAlt, timewindow, inflow_records, dss_file, oper
     currentAlt.addComputeMessage('add_or_subtract_flows - Looking from {0} to {1}'.format(starttime_str, endtime_str))
     dssFm = HecDss.open(dss_file)
 
-    inflows = []
-    times = []
+    # Create lists to hold the data
+    inflows = []  
+    times = []  
 
     # Read inflows
     print('Reading inflows')
@@ -1227,23 +1505,23 @@ def add_or_subtract_flows(currentAlt, timewindow, inflow_records, dss_file, oper
             print(starttime_str, endtime_str)
             # if the record path specifies an alternate DSS file via '::', read from that file instead
             if '::' in inflow_record:
-                dss_file_alt,inflow_rec_alt = inflow_record.split('::')
-                dssFm_alt = HecDss.open(dss_file_alt)
-                ts = dssFm_alt.read(inflow_rec_alt, starttime_str, endtime_str, False)
-                dssFm_alt.close()
-                print(dss_file_alt)
-            else:                
-                ts = dssFm.read(pathname, starttime_str, endtime_str, False)                
-                print(dss_file)
-            ts_data = ts.getData()
-            values = ts_data.values
-            hectimes = ts_data.times
-            units = ts_data.units
-            tstype = ts_data.type
-            # print('num values {0}'.format(len(values)))
-            # print('start {0}'.format(ts_data.getStartTime()))
-            # print('end {0}'.format(ts_data.getEndTime()))
-            if hectimes[0] < starttime_hectime: #if startdate is before the timewindow..
+                dss_file_alt, inflow_rec_alt = inflow_record.split('::')  # alternate DSS file syntax
+                dssFm_alt = HecDss.open(dss_file_alt)  # open alternate file
+                ts = dssFm_alt.read(inflow_rec_alt, starttime_str, endtime_str, False)  # windowed read
+                dssFm_alt.close()  # close alt file
+                print(dss_file_alt)  # echo file
+            
+            else:
+                ts = dssFm.read(pathname, starttime_str, endtime_str, False)  # primary read
+                print(dss_file)  # echo file
+            
+            ts_data = ts.getData()  # unwrap to container
+            values = ts_data.values  # numeric values
+            hectimes = ts_data.times  # HEC times
+            units = ts_data.units  # units
+            tstype = ts_data.type  # type
+
+            if hectimes[0] < starttime_hectime:  # trim start if before window
                 print('start date ({0}) from DSS before timewindow ({1})..'.format(hectimes[0], starttime_hectime))
                 st_offset = (starttime_hectime - hectimes[0]) / (hectimes[1] - hectimes[0])
                 values = values[st_offset:]
@@ -1251,49 +1529,52 @@ def add_or_subtract_flows(currentAlt, timewindow, inflow_records, dss_file, oper
             # if the record's data extends past the run window, trim the trailing values
             if hectimes[-1] > endtime_hectime:
                 print('end date ({0}) from DSS after timewindow ({1})..'.format(hectimes[-1], endtime_hectime))
-                st_offset = (hectimes[-1] - endtime_hectime) / (hectimes[1] - hectimes[0])
-                values = values[:(len(hectimes) - st_offset)]
-                hectimes = hectimes[:(len(hectimes) - st_offset)]
-                
+                st_offset = (hectimes[-1] - endtime_hectime) / (hectimes[1] - hectimes[0])  # steps
+                values = values[:(len(hectimes) - st_offset)]  # trim trailing values
+                hectimes = hectimes[:(len(hectimes) - st_offset)]  # trim trailing times
 
         except HecMathException:
-            currentAlt.addComputeMessage('ERROR reading' + str(pathname))
-            sys.exit(-1)
+            currentAlt.addComputeMessage('ERROR reading' + str(pathname))  # log error
+            sys.exit(-1)  # abort
 
         # if treating values as flow and this record is in cms, convert it to cfs
         if what=="flow":
             if units.lower() == 'cms':
-                currentAlt.addComputeMessage('Converting cms to cfs')
+                currentAlt.addComputeMessage('Converting cms to cfs')  # log conversion
                 convvals = []
+
                 for flow in values:
-                    convvals.append(flow * 35.314666213)
-                values = convvals
+                    convvals.append(flow * 35.314666213)  # cms -> cfs
+
+                values = convvals  # use converted values
 
         # the first record always seeds the running total directly; later records are
         # added or subtracted according to the matching operation flag
         if len(inflows) == 0:
-            inflows = values
-            times = hectimes #TODO: check how this handles missing values
+            inflows = values  # seed series
+            times = hectimes  # reference times
+
         else:
             if operation[j]:
                 # add this record's values onto the running total, timestep by timestep
                 for vi, v in enumerate(values):
-                    inflows[vi] += v
+                    inflows[vi] += v  # add series element-wise
+
             else:
                 # subtract this record's values from the running total, timestep by timestep
                 for vi, v in enumerate(values):
-                    inflows[vi] -= v
+                    inflows[vi] -= v  # subtract element-wise
 
     # if requested, prepend lookback values (copies of the first value) onto the front of the series
     if prepend_n > 0:
         # add first value onto front of record
         # Sometimes ResSim needs some lookback values, or whatever
-        p_times = [times[i] for i in range(len(times))] # convert to list - annoying
-        time_delta = times[1] -times[0]
-        times = [p_times[0] - time_delta*i for i in range(prepend_n,0,-1)] + p_times
-        values = [inflows[i] for i in range(len(inflows))] # convert to list - annoying
-        inflows = [values[0]]*prepend_n + values
-                    
+        p_times = [times[i] for i in range(len(times))]  # copy to list
+        time_delta = times[1] - times[0]  # one-step delta
+        times = [p_times[0] - time_delta * i for i in range(prepend_n, 0, -1)] + p_times  # prepend times
+        values = [inflows[i] for i in range(len(inflows))]  # copy values list
+        inflows = [values[0]] * prepend_n + values  # prepend first value
+
     # Output record
     tsc = TimeSeriesContainer()
     tsc.times = times
@@ -1370,32 +1651,34 @@ def create_constant_dss_rec(currentAlt, timewindow, output_dss_file, constant=0.
         units = 'ft'
         parameter = 'elev'
     else:
-        currentAlt.addComputeMessage('create_zero_dss_rec: what not known: %s'%what)
-        return False
+        currentAlt.addComputeMessage('create_zero_dss_rec: what not known: %s' % what)  # log
+        return False  # unsupported category
 
     # validate that the requested period is supported
     if period.lower()=='1hour':
         pass
-    elif period.lower()=='1day':
-        pass
-    else:
-        currentAlt.addComputeMessage('create_zero_dss_rec: period not known: %s'%period)
-        return False
-
-    dt_format = '%d%b%Y %H%M'
     
-    starttime_str = timewindow.getStartTimeString()
-    endtime_str = timewindow.getEndTimeString()
-    #starttime_hectime = HecTime(starttime_str).value()
-    #endtime_hectime = HecTime(endtime_str).value()
+    elif period.lower() == '1day':
+        pass
+    
+    else:
+        currentAlt.addComputeMessage('create_zero_dss_rec: period not known: %s' % period)  # log
+        return False  # unsupported period
+
+    # Set the format string
+    dt_format = '%d%b%Y %H%M'  # HEC format
+
+    # Get the extents of the time series
+    starttime_str = timewindow.getStartTimeString()  # start string
+    endtime_str = timewindow.getEndTimeString()  # end string
 
     # pad 1 day on records, in case these are used for lookbacks, or balance flow calcs, etc.
-    starttime_dt = hec_str_time_to_dt(starttime_str) - datetime.timedelta(days=1)    
-    endtime_dt = hec_str_time_to_dt(endtime_str) + datetime.timedelta(days=1)
-    starttime_str_pad = starttime_dt.strftime(dt_format)
-    endtime_str_pad = endtime_dt.strftime(dt_format)    
- 
-    currentAlt.addComputeMessage('Looking from {0} to {1}'.format(starttime_str, endtime_str))
+    starttime_dt = hec_str_time_to_dt(starttime_str) - datetime.timedelta(days=1)  # pad -1 day
+    endtime_dt = hec_str_time_to_dt(endtime_str) + datetime.timedelta(days=1)  # pad +1 day
+    starttime_str_pad = starttime_dt.strftime(dt_format)  # format back
+    endtime_str_pad = endtime_dt.strftime(dt_format)  # format back
+
+    currentAlt.addComputeMessage('Looking from {0} to {1}'.format(starttime_str, endtime_str))  # log
 
     ########################
     # Zero-Flow Time Series
@@ -1405,50 +1688,78 @@ def create_constant_dss_rec(currentAlt, timewindow, output_dss_file, constant=0.
     tsmath_zero_flow_day = tsmath.generateRegularIntervalTimeSeries(
         starttime_str_pad,
         endtime_str_pad,
-        period, "0M", constant)
-    tsmath_zero_flow_day.setUnits(units)
-    tsmath_zero_flow_day.setType(dss_type)
-    tsmath_zero_flow_day.setTimeInterval(period)
-    tsmath_zero_flow_day.setLocation(cpart)
-    tsmath_zero_flow_day.setParameterPart(parameter)
-    tsmath_zero_flow_day.setVersion(fpart)
+        period, "0M", constant)  # build constant series
+    
+    tsmath_zero_flow_day.setUnits(units)  # set units
+    tsmath_zero_flow_day.setType(dss_type)  # set type
+    tsmath_zero_flow_day.setTimeInterval(period)  # set interval
+    tsmath_zero_flow_day.setLocation(cpart)  # set C-part
+    tsmath_zero_flow_day.setParameterPart(parameter)  # set parameter part
+    tsmath_zero_flow_day.setVersion(fpart)  # set F-part
 
-    dssFm = HecDss.open(output_dss_file)
-    dssFm.write(tsmath_zero_flow_day)
-    dssFm.close()
+    # Write the series to file
+    dssFm = HecDss.open(output_dss_file)  # open output DSS
+    dssFm.write(tsmath_zero_flow_day)  # write constant series
+    dssFm.close()  # close output DSS
 
+    # Return that the operation was successful
     return True
 
 
 def calculate_relative_humidity(air_temp, dewpoint_temp):
     """
-    Calculate Relative Humidity given the air temperature and dewpoint temperature - August-Roche-Magnus approximation
+    Compute relative humidity (%) from air temperature (°C) and dew point (°C)
+    using the August-Roche-Magnus approximation.
 
-    :param air_temp: Air Temperature in degrees Celsius
-    :param dewpoint_temp: Dew Point Temperature in degrees Celsius
-    :return: Relative Humidity in percentage
+    Parameters
+    ----------
+    air_temp : float
+        Air temperature in °C.
+    dewpoint_temp : float
+        Dew point temperature in °C.
+
+    Returns
+    -------
+    float
+        Relative humidity in percent, bounded to [0.01, 100].
+
+    Notes
+    -----
+    Uses a simplified, commonly applied form suitable for typical ranges.
     """
-    numerator = (112.0 - 0.1 * dewpoint_temp + air_temp)
-    denominator = (112.0 + 0.9 * air_temp)
-    exponent = ((17.62 * dewpoint_temp) / (243.12 + dewpoint_temp)) - ((17.62 * air_temp) / (243.12 + air_temp))
-    relative_humidity = 100.0 * (numerator / denominator) * math.exp(exponent)
-    return max(0.01, min(100.0, relative_humidity))
+  
+ 
+    numerator = (112.0 - 0.1 * dewpoint_temp + air_temp)  # leading term
+    denominator = (112.0 + 0.9 * air_temp)  # normalization
+    
+    exponent = ((17.62 * dewpoint_temp) / (243.12 + dewpoint_temp)) - ((17.62 * air_temp) / (243.12 + air_temp))  # exponent
+    relative_humidity = 100.0 * (numerator / denominator) * math.exp(exponent)  # compute RH
+    
+    return max(0.01, min(100.0, relative_humidity))  # bound result
+
 
 def calculate_dewpoint(air_temp, relative_humidity):
     """
-    Calculate Dew Point Temperature given the air temperature and relative humidity,
-    using the algebraic inversion of the simplified August-Roche-Magnus approximation.
-    
-    Parameters:
-        air_temp (float): Air temperature in C.
-        relative_humidity (float): Relative Humidity in percent (0-100).
-    
-    Returns:
-        float: Dew Point Temperature in C.
+    Calculate Dew Point Temperature given the air temperature and relative humidity, using the algebraic inversion of the 
+    simplified August-Roche-Magnus approximation.
+
+    Parameters
+    ----------
+    air_temp : float
+        Air temperature in °C.
+    relative_humidity : float
+        Relative humidity (0-100%).
+
+    Returns
+    -------
+    float
+        Dew point temperature in °C.
     """
-    gamma = math.log(relative_humidity / 100.0) + (17.62 * air_temp) / (243.12 + air_temp)
-    dewpoint = 243.12 * gamma / (17.62 - gamma)
-    return dewpoint
+
+    gamma = math.log(relative_humidity / 100.0) + (17.62 * air_temp) / (243.12 + air_temp)  # intermediate term
+    dewpoint = 243.12 * gamma / (17.62 - gamma)  # invert ARM
+    
+    return dewpoint  # dew point in °C
 
 
 def relhum_from_at_dp(met_dss_file, at_path, dp_path):
@@ -1475,16 +1786,19 @@ def relhum_from_at_dp(met_dss_file, at_path, dp_path):
     # for each timestep, compute relative humidity from the paired air temp and dew point
     for i in range(tsc.numberValues):
         tsc.values[i] = calculate_relative_humidity(tsc.values[i], dp_data[i])
-    parts = tsc.fullName.split('/')
-    parts[2] = parts[2][:5]
-    parts[3] = 'RELHUM-FROM-AT-DP'
-    parts[6] = parts[6] + '-DERIVED'
-    new_pathname = '/'.join(parts)
-    tsc.fullName = new_pathname
-    tsc.units = '%'
-    print('writing: ', new_pathname)
-    dss.write(tsc)
-    dss.close()
+    
+    # Format the path name for the new series
+    parts = tsc.fullName.split('/')  # split pathname
+    parts[2] = parts[2][:5]  # shorten C-part
+    parts[3] = 'RELHUM-FROM-AT-DP'  # set parameter
+    parts[6] = parts[6] + '-DERIVED'  # mark as derived
+    new_pathname = '/'.join(parts)  # rebuild path
+    
+    # Create the output series
+    tsc.fullName = new_pathname  # assign
+    tsc.units = '%'  # set units
+    dss.write(tsc)  # write derived series
+    dss.close()  # close DSS
 
 
 def dp_from_at_relhum(met_dss_file, at_path, rh_path):
@@ -1511,18 +1825,20 @@ def dp_from_at_relhum(met_dss_file, at_path, rh_path):
     rh_data = data_from_dss(met_dss_file, rh_path, None, None)
     # for each timestep, compute dew point from the paired air temp and relative humidity
     for i in range(tsc.numberValues):
-        #print('AT:',tsc.values[i], 'RH:',rh_data[i])
-        tsc.values[i] = calculate_dewpoint(tsc.values[i], rh_data[i])
-    parts = tsc.fullName.split('/')
-    parts[2] = parts[2][:5]
-    parts[3] = 'temp-dewpoint'
-    parts[6] = parts[6] + '-DERIVED'
-    new_pathname = '/'.join(parts)
-    tsc.fullName = new_pathname
-    #tsc.units = '%' - units should be C...
-    print('writing: ', new_pathname)
-    dss.write(tsc)
-    dss.close()
+        tsc.values[i] = calculate_dewpoint(tsc.values[i], rh_data[i])  # compute dew point
+    
+    # Format the path name for the new series
+    parts = tsc.fullName.split('/')  # split pathname
+    parts[2] = parts[2][:5]  # shorten C-part
+    parts[3] = 'temp-dewpoint'  # set parameter
+    parts[6] = parts[6] + '-DERIVED'  # mark derived
+    new_pathname = '/'.join(parts)  # rebuild
+    
+    # Create the output series
+    tsc.fullName = new_pathname  # assign
+    dss.write(tsc)  # write series
+    dss.close()  # close DSS
+
 
 def check_start_and_end(values, times, startime, endtime):
     """
@@ -1550,9 +1866,11 @@ def check_start_and_end(values, times, startime, endtime):
     # if the data extends past the window, trim the trailing values
     if times[-1] > endtime:
         print('end date ({0}) from DSS after timewindow ({1})..'.format(times[-1], endtime))
-        st_offset = (times[-1] - endtime) / (times[1] - times[0])
-        values = values[:(len(times) - st_offset)]
-        times = times[:(len(times) - st_offset)]
+        st_offset = (times[-1] - endtime) / (times[1] - times[0])  # number of steps to trim
+        values = values[:(len(times) - st_offset)]  # drop trailing values
+        times = times[:(len(times) - st_offset)]  # drop trailing times
+    
+    # Return trimmed outputs to the calling function
     return values, times
 
 
@@ -1601,6 +1919,8 @@ def replace_data(currentAlt, timewindow, pairs, dss_file, dss_outfile, months, s
     currentAlt.addComputeMessage('Looking from {0} to {1}'.format(starttime_str, endtime_str))
     # for each base/alternate record pair, merge them and write the result
     for pair in pairs:
+        # Get the values from the series to be filled
+        # Open the DSS file
         dssFm = HecDss.open(dss_file)
         currentAlt.addComputeMessage('Replacing data for {0} with {1} during {2}'.format(pair[0], pair[1], months))
         base = dssFm.read(pair[0], starttime_str, endtime_str, False)
@@ -1618,50 +1938,61 @@ def replace_data(currentAlt, timewindow, pairs, dss_file, dss_outfile, months, s
         alt = dssFm.read(pair[1], starttime_str, endtime_str, False)
         # optionally standardize the alternate series to the same common interval
         if standard_interval is not None:
-            alt = standardize_interval(alt,standard_interval)
-        alt_data = alt.getData()
-        alt_values = alt_data.values
-        alt_hectimes = alt_data.times
-        alt_units = alt_data.units
-        alt_interval = alt_data.interval
-        alt_values, alt_hectimes = check_start_and_end(alt_values, alt_hectimes, starttime_hectime, endtime_hectime)
+            alt = standardize_interval(alt, standard_interval)  # standardize alt
+        
+        # Get the information from the series
+        alt_data = alt.getData()  # alt container
+        alt_values = alt_data.values  # alt values
+        alt_hectimes = alt_data.times  # alt times
+        alt_units = alt_data.units  # alt units
+        alt_interval = alt_data.interval  # alt interval
+        alt_values, alt_hectimes = check_start_and_end(alt_values, alt_hectimes, starttime_hectime, endtime_hectime)  # trim alt
 
+        # Close the DSS files
         dssFm.close()
 
         # the two records must share units to be merged meaningfully
         if base_units != alt_units:
-            currentAlt.addComputeMessage('Units do not match for {0} and {1}, skipping'.format(pair[0], pair[1]))
+            currentAlt.addComputeMessage('Units do not match for {0} and {1}, skipping'.format(pair[0], pair[1]))  # log mismatch
             dssFm.close()
-            sys.exit(1)
+            sys.exit(1)  # abort
+        
+        # Compare the intervals between series and enforce that they are the same
         if base_interval != alt_interval:
-            currentAlt.addComputeMessage('Intervals do not match for {0} and {1}, changing interval...'.format(pair[0], pair[1]))
+            currentAlt.addComputeMessage('Intervals do not match for {0} and {1}, changing interval...'.format(pair[0], pair[1]))  # log mismatch
             dssFm.close()
-            sys.exit(1)
+            sys.exit(1)  # abort
 
         # for each timestep in the base record, if its month is in the replacement list,
         # swap in the alternate record's value instead
         for i in range(len(base_values)):
-            if base_data.getHecTime(i).month() in months:
-                base_values[i] = alt_values[i]
-                #print('replaced {0}'.format(base_data.getHecTime(i)))
+            if base_data.getHecTime(i).month() in months:  # month selection
+                base_values[i] = alt_values[i]  # replace value
+                
+        # Construct the new pathname
+        new_pathname = base_data.fullName.split('/')  # base path tokens
+        alt_pathname = alt_data.fullName.split('/')  # alt path tokens
+        new_pathname[-2] = 'MergedFrom_{0}'.format(alt_pathname[1])  # set F-part to indicate source
+        new_pathname = '/'.join(new_pathname)  # rebuild path
+        
+        # Write the series to the output file
+        # Create the container
+        tsc = TimeSeriesContainer()  # output container
+        tsc.times = base_hectimes  # times from base
+        tsc.fullName = new_pathname  # destination path
+        tsc.values = base_values  # merged values
+        tsc.units = base_units  # units preserved
+        tsc.type = base_type  # type preserved
+        tsc.numberValues = len(base_values)  # series length
 
-        new_pathname = base_data.fullName.split('/')
-        alt_pathname = alt_data.fullName.split('/')
-        new_pathname[-2] = 'MergedFrom_{0}'.format(alt_pathname[1])
-        new_pathname = '/'.join(new_pathname)
-        print('writing: ',new_pathname)
-        tsc = TimeSeriesContainer()
-        tsc.times = base_hectimes
-        tsc.fullName = new_pathname
-        tsc.values = base_values
-        tsc.units = base_units
-        tsc.type = base_type
-        tsc.numberValues = len(base_values)
-
+        # Open the DSS file
         dssFmOut = HecDss.open(dss_outfile)
+        
+        # Write the container
         dssFmOut.write(tsc)
 
-        dssFm.close()
+        # Close all DSS files
+        dssFm.close()  
         dssFmOut.close()
 
 def airtemp_lapse(dss_file,dss_rec,lapse_in_C,dss_outfile,f_part):
@@ -1693,40 +2024,80 @@ def airtemp_lapse(dss_file,dss_rec,lapse_in_C,dss_outfile,f_part):
         None. Writes the lapse-adjusted record to dss_outfile.
     """
     dss = HecDss.open(dss_file)
+    
+    # Read the timeseries
     tsm = dss.read(dss_rec)
+    
+    # Create a copy of the data
     lapse = lapse_in_C
     # if the source series is in Fahrenheit, convert the lapse amount to an equivalent Fahrenheit offset
     if 'f' in tsm.getUnits().lower():
-        lapse = lapse*9.0/5.0+32.0
-    tsm = tsm.add(lapse)
-    tsc = tsm.getData()
-    dss.close()
-
-    pathparts = dss_rec.split('/')
-    pathparts[-2] = f_part
-    tsc.fullName = '/'.join(pathparts)
-    dss_out = HecDss.open(dss_outfile)
-    dss_out.write(tsc)
-    dss_out.close()
-
-def preprend_first_value_on_ts(dss_file,dss_rec,prepend_n):
-    '''Sometimes ResSim needs some lookback values, or whatever
+        lapse = lapse * 9.0 / 5.0 + 32.0  
     
-    Be careful that the first record is where you want to start - sometimes these things change
-    '''
+    # add lapse
+    tsm = tsm.add(lapse)  
+    
+    # unwrap container
+    tsc = tsm.getData()  
+    
+    # Close the dss file
+    dss.close()  
+
+    # Write the new series to file
+    pathparts = dss_rec.split('/')  # split pathname
+    pathparts[-2] = f_part  # update F-part
+    tsc.fullName = '/'.join(pathparts)  # rebuild pathname
+    dss_out = HecDss.open(dss_outfile)  # open output DSS
+    dss_out.write(tsc)  # write series
+    dss_out.close()  # close output DSS
+
+
+def preprend_first_value_on_ts(dss_file, dss_rec, prepend_n):
+    """
+    Prepend the first value of a series `prepend_n` times (for lookbacks) and write back.
+
+    Parameters
+    ----------
+    dss_file : str
+        DSS file path containing the record.
+    dss_rec : str
+        DSS pathname to modify.
+    prepend_n : int
+        Number of steps to prepend.
+
+    Returns
+    -------
+    None
+    """
+    
+    # Open the DSS file
     dss = HecDss.open(dss_file)
-    tsc = dss.get(dss_rec,True)
+    
+    # Read the record
+    tsc = dss.get(dss_rec, True)
 
-    time_delta = tsc.times[1] - tsc.times[0]
-    times = [tsc.times[i] for i in range(len(tsc.times))] # convert to list - annoying
-    tsc.times = [times[0] - time_delta*i for i in range(prepend_n,0,-1)] + times
+    # Calculate the interval of the timeseries
+    time_delta = tsc.times[1] - tsc.times[0]  
+    
+    # Convert the time vector to a Python list
+    times = [tsc.times[i] for i in range(len(tsc.times))]
+    
+    # Shift everything by a single timestep
+    tsc.times = [times[0] - time_delta * i for i in range(prepend_n, 0, -1)] + times
+    
+    # Reset the start time
     tsc.startTime = tsc.times[0]
-    values = [tsc.values[i] for i in range(len(tsc.values))] # convert to list - annoying
-    tsc.values = [values[0]]*prepend_n + values
-    tsc.numberValues = len(tsc.values)
+    
+    # Copy the values into the new list
+    values = [tsc.values[i] for i in range(len(tsc.values))]  # copy to Python list
+    
+    # Reset the values in the container
+    tsc.values = [values[0]] * prepend_n + values  # prepend values
+    tsc.numberValues = len(tsc.values)  # update length
 
-    dss.put(tsc)
-    dss.close()
+    # Put values into the DSS file and close
+    dss.put(tsc)  # write back to same record
+    dss.close()  # close DSS
 
 def postprend_last_value_on_ts(dss_file,dss_rec,postpend_n):
     """Sometimes ResSim needs some lookback values, or whatever
@@ -1746,15 +2117,25 @@ def postprend_last_value_on_ts(dss_file,dss_rec,postpend_n):
         series.
     """
     dss = HecDss.open(dss_file)
-    tsc = dss.get(dss_rec,True)
+    
+    # Read the record from the file
+    tsc = dss.get(dss_rec, True)
 
+    # Calculate the interval of the timeseries
     time_delta = tsc.times[1] - tsc.times[0]
-    times = [tsc.times[i] for i in range(len(tsc.times))] # convert to list - annoying
-    tsc.times = times + [times[-1] + time_delta*i for i in range(1,postpend_n+1)]
-    #tsc.startTime = tsc.times[0]
-    values = [tsc.values[i] for i in range(len(tsc.values))] # convert to list - annoying
-    tsc.values = values + [values[-1]]*postpend_n
+    
+    # Convert the time vector to a Python list
+    times = [tsc.times[i] for i in range(len(tsc.times))]
+    
+    # Shift everything by a single timestep
+    tsc.times = times + [times[-1] + time_delta * i for i in range(1, postpend_n + 1)]
+    
+    # Copy the values to a new list
+    values = [tsc.values[i] for i in range(len(tsc.values))]
+    
+    # Reset the values in the container
+    tsc.values = values + [values[-1]] * postpend_n
     tsc.numberValues = len(tsc.values)
 
-    dss.put(tsc)
-    dss.close()   
+    # Put the values into the DSS file
+    dss.put(tsc) 
