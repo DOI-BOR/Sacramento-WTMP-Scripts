@@ -1072,9 +1072,9 @@ def backRouteWQTarget2(eqTempDaily, targetTempFuture, sha2kes_diff, hrs, step, l
         else:
             # network.printMessage('Target Temperature Downstream' + str(targetTempFuture))
             raise ValueError('Outlet temperature not bracketed')  # No safe interpolation
-			
-	# Return the value to the calling function
-	return targetTemp
+            
+    # Return the value to the calling function
+    return targetTemp
 
 def upstream_target(forecastDSS,rtw,downstreamTT_rec,eqTemp_rec,kesFlow_rec,sppFlow_rec,loc,TT_W2_rec,ResSimRiver=True):
     """
