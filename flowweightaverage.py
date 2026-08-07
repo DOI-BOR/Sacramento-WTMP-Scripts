@@ -256,15 +256,19 @@ def FWA2(currentAlt, dssFile, timewindow, DSSPaths_list, outputname, cfs_limit=N
       initialized as empty lists beforehand - another likely
       `NameError` source.
     """
+    # Get the times for the analysis
     starttime_str = timewindow.getStartTimeString()
     endtime_str = timewindow.getEndTimeString()
     currentAlt.addComputeMessage('Looking from {0} to {1}'.format(starttime_str, endtime_str))
     dssFm = HecDss.open(dssFile)
 
-    # Get the times for the analysis
-    starttime_str = timewindow.getStartTimeString()  # start time (HEC string)
-    endtime_str = timewindow.getEndTimeString()      # end time (HEC string)
-    currentAlt.addComputeMessage('Looking from {0} to {1}'.format(starttime_str, endtime_str))  # log window
+    # Define the data holder and fill values
+    flow_total = []
+    flowtemp_total = []
+    n_pairs = []
+
+    flow_limit = 0.0 if cfs_limit is None else cfs_limit
+    fill_value = UNDEFINED_DOUBLE if bad_data_fill_tempC is None else bad_data_fill_tempC
     
     # Read each flow/temperature pair and accumulate weighted totals 
     # for each flow/temperature record pair, read and validate the data, then
