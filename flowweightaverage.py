@@ -418,11 +418,6 @@ def FWA(currentAlt, dssFile, timewindow, DSSPaths_list, outputname, cfs_limit=No
       order for the `dss_data` dictionary. Depending on the
       Python/Jython version in use, this may not be guaranteed.
     """
-    starttime_str = timewindow.getStartTimeString()
-    endtime_str = timewindow.getEndTimeString()
-    currentAlt.addComputeMessage('Looking from {0} to {1}'.format(starttime_str, endtime_str))
-    dssFm = HecDss.open(dssFile)
-    dss_data = {}
     
     # Get the time window of the analysis
     starttime_str = timewindow.getStartTimeString()  # window start string

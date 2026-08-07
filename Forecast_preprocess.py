@@ -662,35 +662,6 @@ def forecast_data_preprocess_ResSim_5Res(currentAlternative, computeOptions):
     # forecast reservoir elevations for Shasta, Trinity, and Whiskeytown
     write_forecast_elevations(currentAlternative, rtw, forecast_dss, shared_dir)
 
-    currentAlternative.addComputeMessage("Computing equilibrium temperature, this may take a while...")
-    # eq_temp(rtw,at,cl,ws,sr,td,eq_temp_out)
-    eq_temp(rtw,
-            [forecast_dss,"/MR Sac.-Clear Cr. to Sac R./KRDD/Temp-Air//1Hour/SACTRN_BC_SCRIPT/"],
-            [forecast_dss,"/MR Sac.-Clear Cr. to Sac R./RRAC1/%-Cloud Cover-FRAC//1Hour/SACTRN_BC_SCRIPT/"],
-            [forecast_dss,"/MR Sac.-Clear Cr. to Sac R./KRDD/Speed-Wind//1Hour/SACTRN_BC_SCRIPT/"],
-            [forecast_dss,"/MR SAC.-CLEAR CR. TO SAC R./RRAC1/IRRAD-SOLAR//1HOUR/SACTRN_BC_SCRIPT/"],
-            [forecast_dss,"/MR Sac.-Clear Cr. to Sac R./KRDD/Temp-DewPoint//1Hour/SACTRN_BC_SCRIPT/"],
-            [forecast_dss,"/MR Sac.-Clear Cr. to Sac R./KRDD/Temp-Equil//1Hour/sactrn_bc_script/"]
-           )
-
-    #  Create a set of fixed constant-value reference records 
-    DSS_Tools.create_constant_dss_rec(currentAlternative, rtw, forecast_dss, constant=0.001, what='flow', 
-                        dss_type='PER-AVER', period='1DAY',cpart='TinyFlow',fpart='TinyFlow')
-    DSS_Tools.create_constant_dss_rec(currentAlternative, rtw, forecast_dss, constant=0.001, what='flow', 
-                        dss_type='PER-AVER', period='1HOUR',cpart='TinyFlow',fpart='TinyFlow')
-    DSS_Tools.create_constant_dss_rec(currentAlternative, rtw, forecast_dss, constant=10.0, what='temp-water', 
-                        dss_type='PER-AVER', period='1DAY',cpart='TENS',fpart='TENS')
-    DSS_Tools.create_constant_dss_rec(currentAlternative, rtw, forecast_dss, constant=0.0, what='flow', 
-                        dss_type='PER-AVER', period='1DAY',cpart='ZEROS',fpart='ZEROS')
-    DSS_Tools.create_constant_dss_rec(currentAlternative, rtw, forecast_dss, constant=0.0, what='flow', 
-                        dss_type='PER-AVER', period='1HOUR',cpart='ZEROS',fpart='ZEROS')   
-    DSS_Tools.create_constant_dss_rec(currentAlternative, rtw, forecast_dss, constant=0, what='gate', 
-                        dss_type='INST-VAL', period='1HOUR',cpart='ZEROS',fpart='ZEROS')
-    DSS_Tools.create_constant_dss_rec(currentAlternative, rtw, forecast_dss, constant=1, what='gate', 
-                        dss_type='INST-VAL', period='1HOUR',cpart='ONES',fpart='ONES')
-    DSS_Tools.create_constant_dss_rec(currentAlternative, rtw, forecast_dss, constant=13.0, what='temp-water', 
-                        dss_type='PER-AVER', period='1DAY',cpart='WHI-target-13',fpart='WHI-target-13')
-
     # Compute/Write EQ temperature
     currentAlternative.addComputeMessage("Computing equilibrium temperature, this may take a while...")  # Notice
     

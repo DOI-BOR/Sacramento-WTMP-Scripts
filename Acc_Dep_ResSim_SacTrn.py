@@ -117,22 +117,6 @@ def computeAlternative(currentAlternative, computeOptions):
     # Flows are assumed to be period averaged
     # Evap assumed to be period accumulated length (e.g., ft)
     # Stage assumed to be instantaneous values
-    
-    # define options
-    run_dir = computeOptions.getRunDirectory()
-    project_dir = Project.getCurrentProject().getProjectDirectory()
-    currentAlternative.addComputeMessage('project_dir: ' + project_dir)
-    currentAlternative.addComputeMessage('run dir: ' + run_dir)
-    balance_period_str = currentAlternative.getTimeStep()
-    shared_dir = os.path.join(project_dir, 'shared')
-
-    # source DSS file holding all raw/DMS hydrology records for the study
-    DMS_hydro_dss_file = os.path.join(shared_dir, "DMS_SacTrnHydroTS.dss")
-    # destination DSS file for resampled/derived records and computed balance flows
-    output_dss_file = os.path.join(shared_dir,'DMS_SacTrn_ResSim_Pre-Process.dss')
-    # backup source file used for Keswick's stage/flow data instead of DMS_hydro_dss_file (see below)
-    fallback_dss_file = os.path.join(shared_dir,'WTMP_SacTrn_Historical.dss')
-
     # --- Shasta: resample daily source flows to hourly before building the balance flow ---
     sdf.resample_dss_ts(DMS_hydro_dss_file,'/MR Sac.-Shasta Lake/Sacramento R. a Delta-Flow/Flow//1Day/230.9.125.1.1/',rtw,output_dss_file,'1HOUR')
     sdf.resample_dss_ts(DMS_hydro_dss_file,'/MR Sac.-Shasta Lake/McCloud River-Flow/Flow//1Day/230.8.125.1.1/',rtw,output_dss_file,'1HOUR')
