@@ -483,7 +483,7 @@ def read_inflows_outflows(currentAlt, dss_file, inflow_records, outflow_records,
     - If a record's units are ``'cms'``, values are converted to cfs
       using the factor ``35.314666213``.
     """
-     dssFm = HecDss.open(dss_file)
+    dssFm = HecDss.open(dss_file)
 
     inflows = []
     outflows = []

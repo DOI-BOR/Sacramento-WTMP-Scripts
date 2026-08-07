@@ -1283,7 +1283,7 @@ def strip_templateID_and_rename_records(dssFilePath, currentAlt):
         new_rec_names.add('/'.join(parts))  
         
         # log rename
-        currentAlt.addComputeMessage('Fixing path: ' + r + ' --&gt; ' + new_rec_names[-1])  
+        currentAlt.addComputeMessage('Fixing path: ' + r + ' --> ' + new_rec_names[-1])  
     
     # Rename all records concurrently
     dss.renameRecords(rec_names, new_rec_names)  
