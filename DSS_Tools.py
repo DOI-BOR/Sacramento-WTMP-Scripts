@@ -2416,3 +2416,4 @@ def postprend_last_value_on_ts(dss_file,dss_rec,postpend_n):
 
     # Put the values into the DSS file
     dss.put(tsc)
+    dss.close()
