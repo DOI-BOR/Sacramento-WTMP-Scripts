@@ -433,7 +433,7 @@ def read_ts_rec_w_optional_fname(dssFm, pathname, starttime_str, endtime_str):
 def read_inflows_outflows(currentAlt, dss_file, inflow_records, outflow_records, starttime_str, endtime_str,
                           starttime_hectime, endtime_hectime):
 
-     """
+    """
     Read and sum multiple inflow and outflow DSS records over a given
     time window, converting units to cfs as needed, and return the
     net inflow-minus-outflow time series.

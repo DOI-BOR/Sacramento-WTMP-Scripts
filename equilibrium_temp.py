@@ -673,10 +673,6 @@ def calc_equilibrium_temp(dtt, at, cl, sr, td, ws):
       without raising an exception AND does not differ from the
       bisection solution by more than 1.0 degree; otherwise, the
       bisection result is used instead.
-    - Since `newton_raphson_solve` currently contains a bug (see its
-      Notes) that causes it to always raise `NameError`, this
-      function will in practice always fall back to the bisection
-      solution.
     """
   
     nt = len(dtt)
