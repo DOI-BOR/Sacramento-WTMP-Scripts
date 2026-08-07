@@ -225,6 +225,9 @@ def copy_dss_ts(dss_rec,new_fpart=None,new_dss_rec=None,
         
         for i, TT in enumerate(T_values):
             T_values[i] = (TT - 32.0) * 5.0 / 9.0  # convert F -> C in-place
+            
+        tsc.units = 'C'
+        tsc.values = T_values
         
     # write
     tsc.fullName = dss_rec_out
@@ -1539,7 +1542,7 @@ def add_flows(currentAlt, timewindow, inflow_records, dss_file, output_dss_recor
         reading any of the input records.
 
     """
-	
+    
     #cfs_2_acreft = balance_period * 3600. / 43559.9
     #acreft_2_cfs = 1. / cfs_2_acreft
 

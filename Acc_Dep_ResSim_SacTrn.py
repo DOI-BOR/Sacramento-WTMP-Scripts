@@ -500,7 +500,7 @@ def compute_W2_forecast_balance(currentAlternative, computeOptions):
     if use_conic:
         output_dss_record_name = "/LEWISTON RESERVOIR/BALANCE FLOW/FLOW//1HOUR/DERIVED-CONIC INTERP/"
     
-    if 'ZEROS' in evap_record:
+        if 'ZEROS' in evap_record:
             output_dss_record_name = "/LEWISTON RESERVOIR/BALANCE FLOW/FLOW//1HOUR/DERIVED-CONIC INTERP NO EVAP/"
 
     # ---- Compute and write Lewiston forecast balance flows -------------------------------

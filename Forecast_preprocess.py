@@ -1205,7 +1205,7 @@ def upstream_target(forecastDSS,rtw,downstreamTT_rec,eqTemp_rec,kesFlow_rec,sppF
     sppFlow = DSS_Tools.data_from_dss(forecastDSS, sppFlow_rec, starttime_str, endtime_str)  # Spring Creek diversion daily flows
 
     # first daily eqTemp seem to often be bad, maybe timezone/DSS reading issue
-    eqTemp[0] = eqTemp[1]  # Replace first value with second (original behavior preserved)
+    eqTemp[0] = eqTemp[1]  # Replace first value with second 
 
     shastaTT = []
     # for each downstream target temperature value, back-calculate the required
@@ -1218,7 +1218,12 @@ def upstream_target(forecastDSS,rtw,downstreamTT_rec,eqTemp_rec,kesFlow_rec,sppF
 
         a0, b0, c0, d0 = coeffs[mo_i_prev]  # Previous month coefficients
         a1, b1, c1, d1 = coeffs[mo_i]  # Current month coefficients
-        a2, b2, c2, d2 = coeffs[mo_i]  # (Original code: next uses current coefficients; preserved)
+        a2, b2, c2, d2 = coeffs[mo_i]  # Next uses current coefficients
+        
+        upstreamTT = -1
+        TTDiff = pFrac * (a0 + b0*eqTemp[i] + c0*math.log10(kesFlow[i]) + d0*sppFlow[i]) + \
+                 cFrac * (a1 + b1*eqTemp[i] + c1*math.log10(kesFlow[i]) + d1*sppFlow[i]) + \
+                 nFrac * (a2 + b2*eqTemp[i] + c2*math.log10(kesFlow[i]) + d2*sppFlow[i])
 
         # if using the full ResSim river model, back-route hour-by-hour to solve for
         # the outlet temp; otherwise apply the simpler direct regression offset
@@ -1234,7 +1239,7 @@ def upstream_target(forecastDSS,rtw,downstreamTT_rec,eqTemp_rec,kesFlow_rec,sppF
 
     # copy over first record, which always fails maybe due to time zone read issues
     print('len(shastaTT)', len(shastaTT))  # Diagnostic length print
-    shastaTT[0] = shastaTT[1]  # Replace first element with second (original behavior)
+    shastaTT[0] = shastaTT[1]  # Replace first element with second
 
     # Write the regressed target to the DSS file
     dssFmRec = HecDss.open(forecastDSS)  # Open DSS for writing
