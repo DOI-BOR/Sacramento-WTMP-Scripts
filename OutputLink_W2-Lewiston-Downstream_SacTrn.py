@@ -149,7 +149,19 @@ def computeAlternative(currentAlternative, computeOptions):
     """
     currentAlternative.addComputeMessage("Computing ScriptingAlternative:" + currentAlternative.getName() )
  
-    locations = currentAlternative.getInputDataLocations()[:-1]
+
+    all_locations = currentAlternative.getInputDataLocations()
+    locations = []
+    clear_creek_locations = []
+
+    # sort into clear creek (seg 111) and the rest
+    for location in all_locations:
+        if '111' in str(location):
+            clear_creek_locations.append(location)
+        else:
+            locations.append(location)
+
+
     locations = flowweightaverage.organizeLocations(currentAlternative, locations)
     currentAlternative.addComputeMessage('Found DSS paths:')
 
