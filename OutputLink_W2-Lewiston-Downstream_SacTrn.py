@@ -273,7 +273,7 @@ def computeAlternative(currentAlternative, computeOptions):
     ts_flow = dssFm.read(tspath_flow, starttime_str, endtime_str, False)
     ts_flow = ts_flow.getData()
 
-    new_values = []
+    temperature_values = []
     flow_values = []
 
     for vi, val in enumerate(ts_temperature.values):
@@ -281,35 +281,35 @@ def computeAlternative(currentAlternative, computeOptions):
         # if the temperature value is missing it will be a very negative number
         # detect this and set temperature and flow to zero
         if val <= -100:
-            new_values.append(0)
+            temperature_values.append(0)
             flow_values.append(0)
         else:
             # Apply the monthly heating offset to every value
             # for each value, look up its month's heating offset and add it to the value
             valmonth = readabledates[vi].month
             heat_amount_c = monthly_heating[valmonth]
-            new_values.append(val + heat_amount_c)
+            temperature_values.append(val + heat_amount_c)
             flow_values.append(ts_flow.values[vi])
 
     # Package the heated results and write them to DSS
-    tsc = TimeSeriesContainer()
-    tsc.times = hecstarttimes
-    tsc.fullName = outputpath_temperature
-    tsc.values = new_values
-    tsc.startTime = hecstarttimes[0]
-    tsc.units = ts_temperature.units
-    tsc.type = ts_temperature.type
-    tsc.endTime = hecstarttimes[-1]
-    tsc.numberValues = len(new_values)
-    tsc.startHecTime = rtw.getStartTime()
-    tsc.endHecTime = rtw.getEndTime()
-    dssFm.write(tsc)
+    tsc_temperature = TimeSeriesContainer()
+    tsc_temperature.times = hecstarttimes
+    tsc_temperature.fullName = outputpath_temperature
+    tsc_temperature.values = temperature_values
+    tsc_temperature.startTime = hecstarttimes[0]
+    tsc_temperature.units = ts_temperature.units
+    tsc_temperature.type = ts_temperature.type
+    tsc_temperature.endTime = hecstarttimes[-1]
+    tsc_temperature.numberValues = len(temperature_values)
+    tsc_temperature.startHecTime = rtw.getStartTime()
+    tsc_temperature.endHecTime = rtw.getEndTime()
+    dssFm.write(tsc_temperature)
 
     # write a copy out using the input model f-part, so that plotting will be able to use it with the input model
     #currentAlternative.addComputeMessage("Len of locations: {0}".format(len(locations)))
-    tsc.fullName = fixFpartToInput(tspath_temperature, str(outputpath_temperature))
-    dssFm.write(tsc)
-    currentAlternative.addComputeMessage("Number of Written values: {0}".format(len(new_values)))
+    tsc_temperature.fullName = fixFpartToInput(tspath_temperature, str(outputpath_temperature))
+    dssFm.write(tsc_temperature)
+    currentAlternative.addComputeMessage("Number of Written values: {0}".format(len(temperature_values)))
 
     # same for flow data
     tsc_flow = TimeSeriesContainer()
