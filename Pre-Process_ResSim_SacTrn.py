@@ -153,12 +153,10 @@ def computeAlternative(currentAlternative, computeOptions):
         dss_file = computeOptions.getDssFilename()
         locations_obj = currentAlternative.getInputDataLocations()
         locations_obj_2 = DSS_Tools.organizeLocations(currentAlternative, locations_obj, model_output_and_target, return_dss_paths=False)
-        dss_model_path, _ = DSS_Tools.getDataLocationDSSInfo(locations_obj_2[0], currentAlternative, computeOptions) # use for w2 f-part
-        model_fpart = dss_model_path.split('/')[6]
-        W2OutflowTempRec = "/W2:two_77.csv/Seg 77 Withdrawal/Temp-TWO//1Hour/" + model_fpart + '/' # TODO: make linked rec
+        dss_model_path, _ = DSS_Tools.getDataLocationDSSInfo(locations_obj_2[0], currentAlternative, computeOptions)
         dssFm = HecDss.open(dss_file)
-        tsc = dssFm.get(W2OutflowTempRec,True) # use get with True here to capture entire record, 'read' seems to leave off data randomly
-        
+        tsc = dssFm.get(dss_model_path,True) # use get with True here to capture entire record, 'read' seems to leave off data randomly
+
         # validate that the W2 outflow temperature record exists and has data
         data_check = True
         if tsc is None:
@@ -167,10 +165,10 @@ def computeAlternative(currentAlternative, computeOptions):
             data_check = False
         elif len(tsc.times) == 0:
             data_check = False
-        
+
         # if validation failed, log an error and stop processing
         if not data_check:
-            currentAlternative.addComputeErrorMessage('W2 outflow temperature data not found: '+W2OutflowTempRec+' \n')
+            currentAlternative.addComputeErrorMessage('W2 outflow temperature data not found: '+dss_model_path+' \n')
             return False
         dtt = DSS_Tools.datetimes_from_tsc(tsc)
         
@@ -190,7 +188,7 @@ def computeAlternative(currentAlternative, computeOptions):
         tsc_shift = TimeSeriesContainer() # have to create a new tsc as the start time changes (don't know another way)
         tsc_shift.startTime = hectimes_interp[0]
         tsc_shift.times = hectimes_interp
-        tsc_shift.fullName = W2OutflowTempRec #[:-1] + '--/'
+        tsc_shift.fullName = dss_model_path #[:-1] + '--/'
         tsc_shift.units = tsc.units
         tsc_shift.type = tsc.type
         tsc_shift.values = values_interp
