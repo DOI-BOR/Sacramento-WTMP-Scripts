@@ -1,4 +1,3 @@
-
 from hec.heclib.dss import HecDss
 from hec.hecmath import HecMathException
 from hec.heclib.util.Heclib import UNDEFINED_DOUBLE
@@ -40,18 +39,27 @@ for path in matching_paths:
 # append path
 sys.path.append(os.path.join(Project.getCurrentProject().getWorkspacePath(), "scripts"))
 
-import Forecast_preprocess as fpp
-reload(fpp)
-
-import DSS_Tools
-reload(DSS_Tools)
-
-import tz_offset
-reload(tz_offset)
-
-model_output_and_target = [ 'model_output','target_temp']
-
 
 def computeAlternative(currentAlternative, computeOptions):
+    """
+    This just logs a message and pauses for 10 seconds to allow files to unlock
+
+    Parameters
+    ----------
+    currentAlternative : object
+        The alternative object being computed. Must support
+        `getOutputDataLocations()` for logging.
+    computeOptions : object
+        The compute options/settings object.
+
+    Returns
+    -------
+    bool
+        True once the waiting is over.
+
+    """
+
     currentAlternative.addComputeMessage("Pausing to allow for DSS files to unlock")
     time.sleep(10)
+
+    return True
