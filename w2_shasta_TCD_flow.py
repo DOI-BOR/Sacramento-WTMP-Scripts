@@ -1,26 +1,124 @@
+"""
+w2_shasta_TCD_flow
+====================
 
-from hec.heclib.dss import HecDss
-from hec.hecmath import HecMathException
-from hec.heclib.util.Heclib import UNDEFINED_DOUBLE
-from hec.heclib.util import HecTime
-from hec.io import DSSIdentifier
-from hec.io import TimeSeriesContainer
-import hec.hecmath.TimeSeriesMath as tsmath
-from rma.util.RMAConst import MISSING_DOUBLE
-import math
-import sys
-import datetime as dt
-import os, sys
+Incomplete/in-progress WAT Scripting Alternative intended to distribute total
+Shasta powerhouse flow across the Trinity/Shasta TCD (Temperature Control
+Device) gate levels and point sinks, based on gate status, water surface
+elevation (WSE), and generation flow.
 
-from com.rma.io import DssFileManagerImpl
-from com.rma.model import Project
+Notes
+-----
+- **Environment:** Jython (Python 2.7 semantics) within HEC-WAT.
+- **Status:** This module is not functional as written - see the
+  `SyntaxError` flagged below and the docstring notes on
+  `computeAlternative` for details on what is and is not implemented.
+- **Dependencies:** `hec.heclib.dss`, `hec.hecmath`, `hec.heclib.util`,
+  `hec.io`, `Forecast_preprocess`.
+"""
 
-sys.path.append(os.path.join(Project.getCurrentProject().getWorkspacePath(), "scripts"))
+from hec.heclib.dss import HecDss                     # HEC-DSS: open/read/write DSS files (imported for completeness; not directly used)
+from hec.hecmath import HecMathException              # HEC math exception type (imported for completeness; not directly used)
+from hec.heclib.util.Heclib import UNDEFINED_DOUBLE   # HEC sentinel for undefined values (imported for completeness; not directly used)
+from hec.heclib.util import HecTime                   # HEC time object (imported for completeness; not directly used)
+from hec.io import DSSIdentifier                      # DSS path identifier helper (not directly used)
+from hec.io import TimeSeriesContainer                # Container class (imported for completeness; not directly used)
+import hec.hecmath.TimeSeriesMath as tsmath           # Time series math wrapper (imported for completeness; not directly used)
+from rma.util.RMAConst import MISSING_DOUBLE          # RMA sentinel for missing values (imported for completeness; not directly used)
+import math                                           # Standard math library (imported for completeness; not directly used)
+import sys                                            # System utilities: path manipulation
+import datetime as dt                                 # Python datetime (imported for completeness; not directly used)
+import os, sys                                        # Filesystem and system path utilities (combined import per original)
 
-import Forecast_preprocess as fpp
-reload(fpp)
+from com.rma.io import DssFileManagerImpl             # RMA DSS manager (imported for completeness; not directly used)
+from com.rma.model import Project                     # WAT project API: resolve workspace path for scripts folder
+
+sys.path.append(os.path.join(Project.getCurrentProject().getWorkspacePath(), "scripts"))  # Ensure 'scripts' folder is importable
+
+import Forecast_preprocess as fpp                     # Local module: forecast boundary-condition preprocessing steps (imported but not used below, since the function body is incomplete)
+reload(fpp)                                            # Jython: ensure latest version is loaded
 
 def computeAlternative(currentAlternative, computeOptions):
+    """
+    Compute a forecast scripting alternative that distributes total
+    powerhouse flow across the Trinity/Shasta TCD (Temperature
+    Control Device) gate levels and point sinks, based on gate
+    status, water surface elevation (WSE), and generation flow.
+
+    Parameters
+    ----------
+    currentAlternative : object
+        The alternative object being computed. Must support
+        `addComputeMessage()` for logging status messages during the
+        compute process.
+    computeOptions : object
+        The compute options/settings object, used to control
+        preprocessing behavior for this run.
+
+    Returns
+    -------
+    None
+        No return value is currently implemented. Based on the
+        pattern used elsewhere in this codebase, this function is
+        expected to eventually return True on success (and possibly
+        False on data validation failure), once the flow-distribution
+        logic is written.
+
+    Raises
+    ------
+    SyntaxError
+        **This module cannot currently be imported or run.** The
+        `sink_elevs` dictionary literal defined in the function body
+        is missing commas between its four key-value entries
+        (`'TCDU': {...}`, `'TCDM': {...}`, `'TCDL': {...}`,
+        `'TCDS': {...}`) - each entry needs a trailing comma before
+        the next key begins. As written, Python/Jython will raise a
+        `SyntaxError` while parsing this dictionary literal, before
+        the function can even be called. This has been left
+        unchanged per instructions, but is flagged here prominently
+        since it blocks the entire module from loading (unlike the
+        runtime-only bugs noted in other files in this codebase).
+
+    Notes
+    -----
+    This function currently only sets up static reference data
+    (outlet order and sink elevations) and contains a detailed plan,
+    written as comments, for the flow-distribution algorithm. The
+    actual computation steps (loading DSS data, computing
+    gate/flow/WSE logic, and returning a result) are not yet
+    implemented below. This docstring documents both what is
+    implemented and the intended behavior described in those
+    planning comments, so the gap is clear.
+
+    Intended workflow (per in-line comments, not yet coded):
+
+    1. Load the TCD gate change summary from DSS. Resample to
+       regular hourly values if needed, and fill gaps.
+    2. Create summed totals of the number of open gates at the
+       upper, mid, lower, and side gate levels.
+    3. Load WSE (water surface elevation) data, converting units to
+       feet if necessary.
+    4. Load generation flow data, resampled to hourly. Only perform
+       calculations for timestamps where gate, flow, and WSE data
+       are all available.
+    5. Initialize flow at each of the 4 gate levels to 0.
+    6. Distribute flow across levels and point sinks:
+
+       - Assign all flow to the highest open gate level.
+       - Split that level's flow evenly across its 3 point sinks
+         (while all flow is still nominally on the highest open
+         level).
+       - Compare WSE minus 3 ft against each sink's elevation: if
+         the sink is submerged, record its flow, then check if
+         remaining flow is greater than zero.
+       - Remove any sinks above the WSE from further consideration.
+       - If any submerged sinks remain in the current level, assign
+         all flow to those remaining 1 or 2 sinks.
+       - Otherwise, move to the next gate level down and determine
+         how many of ITS point sinks are submerged, using a
+         lookahead check against the following level's first sink
+         (index into `first_next_gate`).
+    """
     currentAlternative.addComputeMessage("Computing ScriptingAlternative:" + currentAlternative.getName())
     currentAlternative.addComputeMessage('\n')
 
@@ -77,5 +175,3 @@ def computeAlternative(currentAlternative, computeOptions):
     #	   active level are below water, using a funny test of the 1st member of the 
     #	   NEXT NEXT level (4th index of first_next_gate, which should be first_next_sink)
     #      *** should the index to first_next_gate actually be 3?
-
-

@@ -1,19 +1,34 @@
+"""
+Pre-Process_ResSim_SacTrn
+==========================
 
-from hec.heclib.dss import HecDss
-from hec.hecmath import HecMathException
-from hec.heclib.util.Heclib import UNDEFINED_DOUBLE
-from hec.heclib.util import HecTime
-from hec.io import DSSIdentifier
-from hec.io import TimeSeriesContainer
-import hec.hecmath.TimeSeriesMath as tsmath
-from rma.util.RMAConst import MISSING_DOUBLE
-import math
-import sys
-import datetime as dt
-import os, sys
+Compute a WAT Scripting Alternative that runs forecast data preprocessing for
+the ResSim 5-reservoir Sacramento-Trinity model, with optional W2 (water
+quality) outflow temperature timing correction when a linked W2 model is
+present in the simulation.
 
-from com.rma.io import DssFileManagerImpl
-from com.rma.model import Project
+Notes
+-----
+- **Environment:** Jython (Python 2.7 semantics) within HEC-WAT.
+- **Dependencies:** `hec.heclib.dss`, `hec.hecmath`, `hec.heclib.util`,
+  `hec.io`, `Forecast_preprocess`, `DSS_Tools`, `tz_offset`.
+"""
+
+from hec.heclib.dss import HecDss                     # HEC-DSS: open/read/write DSS files
+from hec.hecmath import HecMathException              # HEC math exception type (imported for completeness; not directly used)
+from hec.heclib.util.Heclib import UNDEFINED_DOUBLE   # HEC sentinel for undefined values (imported for completeness)
+from hec.heclib.util import HecTime                   # HEC time object: used to convert python datetimes to HEC integer times
+from hec.io import DSSIdentifier                      # DSS path identifier helper (not directly used)
+from hec.io import TimeSeriesContainer                # Container class used to build the corrected/interpolated W2 series
+import hec.hecmath.TimeSeriesMath as tsmath           # Time series math wrapper (imported for completeness; not directly used)
+from rma.util.RMAConst import MISSING_DOUBLE          # RMA sentinel for missing values (imported for completeness)
+import math                                           # Standard math library (imported for completeness; not directly used)
+import sys                                            # System utilities: path manipulation
+import datetime as dt                                 # Python datetime: timestamp arithmetic for W2 timing correction
+import os, sys                                        # Filesystem and system path utilities (combined import per original)
+
+from com.rma.io import DssFileManagerImpl             # RMA DSS manager (imported for completeness; not directly used)
+from com.rma.model import Project                     # WAT project API: resolve workspace path for scripts folder
 
 # print current path
 print("Current paths: ", sys.path)
@@ -40,19 +55,67 @@ for path in matching_paths:
 # append path
 sys.path.append(os.path.join(Project.getCurrentProject().getWorkspacePath(), "scripts"))
 
-import Forecast_preprocess as fpp
-reload(fpp)
+import Forecast_preprocess as fpp                     # Local module: forecast boundary-condition preprocessing steps
+reload(fpp)                                            # Jython: ensure latest version is loaded
 
-import DSS_Tools
-reload(DSS_Tools)
+import DSS_Tools                                       # Local module: DSS/organizing/time-conversion utilities
+reload(DSS_Tools)                                      # Reload to ensure latest version
 
-import tz_offset
-reload(tz_offset)
+import tz_offset                                       # Local module: timezone/day offset used by equilibrium temp calcs
+reload(tz_offset)                                      # Reload to ensure latest version
 
 model_output_and_target = [ 'model_output','target_temp']
 
 
 def computeAlternative(currentAlternative, computeOptions):
+    """
+    Compute a forecast scripting alternative for the ResSim
+    5-reservoir model, with optional W2 (water quality) temperature
+    handling.
+
+    Parameters
+    ----------
+    currentAlternative : object
+        The alternative object being computed. Must support
+        `addComputeMessage()`, `addComputeErrorMessage()`, and
+        `getInputDataLocations()` for logging and retrieving linked
+        data locations.
+    computeOptions : object
+        The compute options/settings object, used to retrieve the
+        run directory and DSS filename for this compute.
+
+    Returns
+    -------
+    bool or None
+        True if preprocessing completes successfully (and, for W2
+        runs, the temperature correction completes without error).
+        Returns False if the W2 outflow temperature record is
+        missing or empty. Returns None (implicitly) if
+        `data_preprocess` fails and no W2 correction path is hit.
+
+    Notes
+    -----
+    Workflow:
+
+    1. Logs a compute status message to the alternative.
+    2. Runs forecast data preprocessing via
+       `Forecast_preprocess.forecast_data_preprocess_ResSim_5Res`.
+    3. Determines whether the current run is a W2 run based on the
+       run directory name. If so:
+
+       - Locates the linked W2 outflow temperature DSS record.
+       - Validates that the record exists and contains data.
+       - Fixes potential timing inaccuracies in the W2 output by
+         snapping timestamps to the top of the hour, padding one
+         hour before and after the record, and linearly
+         interpolating values onto an hourly grid.
+       - Writes the corrected time series back to the DSS file.
+
+    A commented-out block above the timing-correction step describes
+    an alternate (currently disabled) approach for copying the
+    forecast target temperature to the F-part of the linked W2 model
+    record; it is preserved in the code for reference.
+    """
     currentAlternative.addComputeMessage("Computing ScriptingAlternative:" + currentAlternative.getName())
     currentAlternative.addComputeMessage('\n')
 
@@ -93,6 +156,8 @@ def computeAlternative(currentAlternative, computeOptions):
         dss_model_path, _ = DSS_Tools.getDataLocationDSSInfo(locations_obj_2[0], currentAlternative, computeOptions)
         dssFm = HecDss.open(dss_file)
         tsc = dssFm.get(dss_model_path,True) # use get with True here to capture entire record, 'read' seems to leave off data randomly
+
+        # validate that the W2 outflow temperature record exists and has data
         data_check = True
         if tsc is None:
             data_check = False
@@ -100,6 +165,8 @@ def computeAlternative(currentAlternative, computeOptions):
             data_check = False
         elif len(tsc.times) == 0:
             data_check = False
+
+        # if validation failed, log an error and stop processing
         if not data_check:
             currentAlternative.addComputeErrorMessage('W2 outflow temperature data not found: '+dss_model_path+' \n')
             return False
@@ -117,6 +184,7 @@ def computeAlternative(currentAlternative, computeOptions):
         values_interp = DSS_Tools.linear_interp_datetime(dtt, tsc.values, dtt_interp)
         hectimes_interp = [HecTime(d.strftime('%d%b%Y %H%M')).value() for d in dtt_interp]
 
+        # build a new time series container since the start time changes
         tsc_shift = TimeSeriesContainer() # have to create a new tsc as the start time changes (don't know another way)
         tsc_shift.startTime = hectimes_interp[0]
         tsc_shift.times = hectimes_interp
@@ -164,5 +232,6 @@ def computeAlternative(currentAlternative, computeOptions):
         dssFm.put(tsc_shift)    
         dssFm.close()
 
+    # if preprocessing succeeded (and, for W2 runs, correction completed above), mark as successful
     if data_preprocess: #and acc_dep:
         return True
